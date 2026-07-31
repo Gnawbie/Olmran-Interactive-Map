@@ -45,8 +45,8 @@ html, body {
 #control-box {
   position: absolute;
   top: 68px;
-  left: 12px;
-  z-index: 900;
+  left: 64px;
+  z-index: 1001;
   min-width: 180px;
   background: #14171cd9;
   color: #e8e8e8;
