@@ -5,6 +5,7 @@
   let currentLayerId = MAP_LAYERS[0].id;
   let imageOverlay = null;
   let markerLayerGroup = L.layerGroup();
+  let amenityLayerGroup = L.layerGroup();
   let devPickerActive = false;
   const devPoints = [];
   const activeTypeFilters = new Set();
@@ -59,6 +60,7 @@
     }
 
     renderMarkers();
+    renderAmenityBadges();
   }
 
   function markerIcon(type) {
@@ -112,6 +114,49 @@
         markerLayerGroup.addLayer(marker);
       });
     markerLayerGroup.addTo(map);
+  }
+
+  // ---- Zone amenity badges ----
+  function amenityDef(id) {
+    return AMENITY_TYPES.find(a => a.id === id);
+  }
+
+  function amenityBadgeIcon(amenityIds) {
+    const badges = amenityIds
+      .map(id => amenityDef(id))
+      .filter(Boolean)
+      .map(def => `<span class="amenity-badge" style="background:${def.color}">${def.symbol}</span>`)
+      .join("");
+    return L.divIcon({
+      className: "",
+      html: `<div class="amenity-badge-row">${badges}</div>`,
+      iconSize: [140, 24],
+      iconAnchor: [70, 34]
+    });
+  }
+
+  function renderAmenityBadges() {
+    amenityLayerGroup.clearLayers();
+    Object.entries(ZONE_AMENITIES).forEach(([zoneName, amenityIds]) => {
+      const zone = findZoneByName(zoneName);
+      if (!zone || zone.layer !== currentLayerId || amenityIds.length === 0) return;
+      const marker = L.marker(xyToLatLng(zone.x, zone.y), { icon: amenityBadgeIcon(amenityIds) });
+      const labels = amenityIds.map(id => amenityDef(id)).filter(Boolean).map(def => def.label).join(", ");
+      marker.bindPopup(`<div class="map-popup"><h3>${zoneName}</h3><p>${labels}</p></div>`);
+      amenityLayerGroup.addLayer(marker);
+    });
+    amenityLayerGroup.addTo(map);
+  }
+
+  function renderAmenityLegend() {
+    const wrap = document.getElementById("amenity-legend");
+    wrap.innerHTML = "";
+    AMENITY_TYPES.forEach(def => {
+      const row = document.createElement("div");
+      row.className = "amenity-legend-row";
+      row.innerHTML = `<span class="amenity-badge" style="background:${def.color}">${def.symbol}</span><span>${def.label}</span>`;
+      wrap.appendChild(row);
+    });
   }
 
   function renderZoneSelect() {
@@ -468,6 +513,7 @@
   renderDevZoneTargetSelect();
   renderLayerSelect();
   renderFilterChips();
+  renderAmenityLegend();
   renderDevPoints();
   makeDraggable(document.getElementById("control-box"), document.getElementById("control-box-header"), "controlBoxPosition");
   if (!applyViewFromUrl()) {
