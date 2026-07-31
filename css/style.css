@@ -56,6 +56,10 @@ html, body {
   overflow: hidden;
 }
 
+#control-box.dragging {
+  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+}
+
 #control-box-header {
   padding: 8px 12px;
   font-weight: 700;
@@ -63,6 +67,9 @@ html, body {
   letter-spacing: 0.3px;
   background: #1c2028;
   border-bottom: 1px solid #3a3f4b;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
 }
 
 #control-box-body {

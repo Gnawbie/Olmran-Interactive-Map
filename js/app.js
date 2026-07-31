@@ -213,6 +213,61 @@
     setTimeout(() => { btn.textContent = original; }, 1200);
   }
 
+  // ---- Draggable panels ----
+  function makeDraggable(panel, handle, storageKey) {
+    let dragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    function clamp(value, max) {
+      return Math.min(Math.max(0, value), Math.max(0, max));
+    }
+
+    function applyPosition(left, top) {
+      const maxLeft = window.innerWidth - panel.offsetWidth;
+      const maxTop = window.innerHeight - panel.offsetHeight;
+      panel.style.left = `${clamp(left, maxLeft)}px`;
+      panel.style.top = `${clamp(top, maxTop)}px`;
+      panel.style.right = "auto";
+    }
+
+    if (storageKey) {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const { left, top } = JSON.parse(saved);
+          applyPosition(left, top);
+        } catch (e) { /* ignore malformed saved position */ }
+      }
+    }
+
+    handle.addEventListener("pointerdown", (e) => {
+      dragging = true;
+      const rect = panel.getBoundingClientRect();
+      offsetX = e.clientX - rect.left;
+      offsetY = e.clientY - rect.top;
+      handle.setPointerCapture(e.pointerId);
+      panel.classList.add("dragging");
+    });
+
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      applyPosition(e.clientX - offsetX, e.clientY - offsetY);
+    });
+
+    function endDrag(e) {
+      if (!dragging) return;
+      dragging = false;
+      panel.classList.remove("dragging");
+      if (storageKey) {
+        const rect = panel.getBoundingClientRect();
+        localStorage.setItem(storageKey, JSON.stringify({ left: rect.left, top: rect.top }));
+      }
+    }
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
+  }
+
   function applyViewFromUrl() {
     const params = new URLSearchParams(location.search);
     const layer = params.get("layer");
@@ -414,6 +469,7 @@
   renderLayerSelect();
   renderFilterChips();
   renderDevPoints();
+  makeDraggable(document.getElementById("control-box"), document.getElementById("control-box-header"), "controlBoxPosition");
   if (!applyViewFromUrl()) {
     loadLayer(currentLayerId);
   }
