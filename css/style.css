@@ -75,6 +75,25 @@ html, body {
   font-style: italic;
 }
 
+.control-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #8ea0d0;
+  margin-bottom: 5px;
+}
+
+#zone-select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0f0f0;
+  font-size: 13px;
+}
+
 #search-wrap {
   position: relative;
   flex: 1;

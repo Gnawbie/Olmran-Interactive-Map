@@ -112,6 +112,23 @@
     markerLayerGroup.addTo(map);
   }
 
+  function renderZoneSelect() {
+    const select = document.getElementById("zone-select");
+    const sorted = [...ZONES].sort((a, b) => a.name.localeCompare(b.name));
+    sorted.forEach(zone => {
+      const opt = document.createElement("option");
+      opt.value = zone.name;
+      opt.textContent = zone.name;
+      select.appendChild(opt);
+    });
+    select.addEventListener("change", () => {
+      if (!select.value) return;
+      const zone = sorted.find(z => z.name === select.value);
+      if (zone) goTo(zone);
+      select.value = "";
+    });
+  }
+
   function renderLayerSelect() {
     const select = document.getElementById("layer-select");
     select.innerHTML = "";
@@ -330,6 +347,7 @@
     }
   });
 
+  renderZoneSelect();
   renderLayerSelect();
   renderFilterChips();
   renderDevPoints();
