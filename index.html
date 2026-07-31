@@ -29,10 +29,14 @@
 <div id="dev-panel" class="hidden">
   <div id="dev-header">
     <span>Coordinate Picker — click the map to log a point</span>
+    <button id="dev-copy-view-link">Copy Link to Current View</button>
     <button id="dev-clear">Clear</button>
     <button id="dev-close">×</button>
   </div>
-  <textarea id="dev-output" readonly placeholder="Clicked points will appear here as JSON..."></textarea>
+  <div id="dev-body">
+    <div id="dev-points"></div>
+    <textarea id="dev-output" readonly placeholder="Clicked points will appear here as JSON..."></textarea>
+  </div>
 </div>
 
 <div id="popup-template" class="hidden"></div>
