@@ -50,7 +50,7 @@ const ZONES = [
   { name: "Nahaz Bay", layer: "land-of-kaid", x: 1130, y: 5094 },
   { name: "Xian Forest", layer: "land-of-kaid", x: 800, y: 5359 },
   { name: "Oyster Bay", layer: "land-of-kaid", x: 487, y: 5922 },
-  { name: "Cohat Bamboo Forest", layer: "land-of-kaid", x: 1668, y: 4989 },
+  { name: "Tokat Bamboo Forest", layer: "land-of-kaid", x: 1668, y: 4989 },
   { name: "Nosho Rainforest", layer: "land-of-kaid", x: 1868, y: 5131 },
   { name: "Thousand Falls", layer: "land-of-kaid", x: 1958, y: 5421 },
   { name: "Cerngild, Lost City of Gold", layer: "land-of-kaid", x: 2471, y: 5897 },

@@ -36,6 +36,15 @@
     return { x: Math.round(latlng.lng), y: Math.round(-latlng.lat) };
   }
 
+  function clampToLayerBounds(layerId, x, y) {
+    const layer = layersById[layerId];
+    if (!layer) return { x, y };
+    return {
+      x: Math.min(Math.max(0, x), layer.width),
+      y: Math.min(Math.max(0, y), layer.height)
+    };
+  }
+
   function loadLayer(layerId, { preserveView } = {}) {
     const layer = layersById[layerId];
     if (!layer) return;
@@ -135,6 +144,16 @@
     });
   }
 
+  function amenityPointIcon(id) {
+    const def = amenityDef(id);
+    return L.divIcon({
+      className: "",
+      html: `<span class="amenity-badge" style="background:${def ? def.color : "#999"}">${def ? def.symbol : "?"}</span>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 26]
+    });
+  }
+
   function renderAmenityBadges() {
     amenityLayerGroup.clearLayers();
     Object.entries(ZONE_AMENITIES).forEach(([zoneName, amenityIds]) => {
@@ -145,7 +164,60 @@
       marker.bindPopup(`<div class="map-popup"><h3>${zoneName}</h3><p>${labels}</p></div>`);
       amenityLayerGroup.addLayer(marker);
     });
+
+    AMENITY_POINTS
+      .filter(p => p.layer === currentLayerId)
+      .forEach(p => {
+        const def = amenityDef(p.type);
+        const marker = L.marker(xyToLatLng(p.x, p.y), { icon: amenityPointIcon(p.type) });
+        const content = document.createElement("div");
+        content.className = "map-popup";
+        content.innerHTML = `<h3>${def ? def.label : p.type}</h3><p>x:${p.x} y:${p.y}</p>`;
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "Remove";
+        removeBtn.className = "amenity-point-remove";
+        removeBtn.addEventListener("click", () => {
+          const idx = AMENITY_POINTS.indexOf(p);
+          if (idx !== -1) AMENITY_POINTS.splice(idx, 1);
+          renderAmenityBadges();
+          updateTagStatus();
+        });
+        content.appendChild(removeBtn);
+        marker.bindPopup(content);
+        amenityLayerGroup.addLayer(marker);
+      });
+
     amenityLayerGroup.addTo(map);
+  }
+
+  // ---- Dev: drag-and-drop amenity tagging ----
+  function renderAmenityPalette() {
+    const wrap = document.getElementById("dev-amenity-palette");
+    wrap.innerHTML = "";
+    AMENITY_TYPES.forEach(def => {
+      const chip = document.createElement("div");
+      chip.className = "amenity-drag-chip";
+      chip.draggable = true;
+      chip.style.background = def.color;
+      chip.innerHTML = `<span class="chip-symbol">${def.symbol}</span><span>${def.label}</span>`;
+      chip.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", def.id);
+        e.dataTransfer.effectAllowed = "copy";
+      });
+      wrap.appendChild(chip);
+    });
+  }
+
+  function updateTagStatus(message) {
+    document.getElementById("dev-tag-status").textContent = message || `${AMENITY_POINTS.length} point(s) tagged this session`;
+  }
+
+  function formatAmenityPointsFile(points) {
+    const lines = points.map(p => {
+      const fields = [`type: ${JSON.stringify(p.type)}`, `layer: ${JSON.stringify(p.layer)}`, `x: ${Math.round(p.x)}`, `y: ${Math.round(p.y)}`];
+      return `  { ${fields.join(", ")} }`;
+    });
+    return `const AMENITY_POINTS = [\n${lines.join(",\n")}\n];\n`;
   }
 
   function renderAmenityLegend() {
@@ -476,6 +548,28 @@
     flashAt(x, y);
   });
 
+  const mapContainer = map.getContainer();
+  mapContainer.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    mapContainer.classList.add("drag-over-active");
+  });
+  mapContainer.addEventListener("dragleave", (e) => {
+    if (e.target === mapContainer) mapContainer.classList.remove("drag-over-active");
+  });
+  mapContainer.addEventListener("drop", (e) => {
+    e.preventDefault();
+    mapContainer.classList.remove("drag-over-active");
+    const amenityId = e.dataTransfer.getData("text/plain");
+    if (!amenityDef(amenityId)) return;
+    const raw = latLngToXY(map.mouseEventToLatLng(e));
+    const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
+    AMENITY_POINTS.push({ type: amenityId, layer: currentLayerId, x, y });
+    renderAmenityBadges();
+    updateTagStatus();
+    flashAt(x, y);
+  });
+
   // ---- Wire up UI ----
   document.getElementById("dev-toggle").addEventListener("click", () => toggleDevPicker());
   document.getElementById("dev-close").addEventListener("click", () => toggleDevPicker(false));
@@ -501,6 +595,9 @@
   document.getElementById("dev-export-zones").addEventListener("click", (e) => {
     copyToClipboard(formatZonesFile(ZONES), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
   });
+  document.getElementById("dev-export-amenity-points").addEventListener("click", (e) => {
+    copyToClipboard(formatAmenityPointsFile(AMENITY_POINTS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
+  });
   document.getElementById("search-box").addEventListener("input", (e) => runSearch(e.target.value));
   document.getElementById("search-box").addEventListener("focus", (e) => runSearch(e.target.value));
   document.addEventListener("click", (e) => {
@@ -514,6 +611,8 @@
   renderLayerSelect();
   renderFilterChips();
   renderAmenityLegend();
+  renderAmenityPalette();
+  updateTagStatus();
   renderDevPoints();
   makeDraggable(document.getElementById("control-box"), document.getElementById("control-box-header"), "controlBoxPosition");
   if (!applyViewFromUrl()) {

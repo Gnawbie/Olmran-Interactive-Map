@@ -255,7 +255,7 @@ html, body {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 256px;
+  height: 296px;
   z-index: 1000;
   background: #14171c;
   border-top: 2px solid #5c4a2a;
@@ -328,6 +328,77 @@ html, body {
   cursor: pointer;
   font-size: 12px;
   white-space: nowrap;
+}
+
+#dev-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  background: #1a1a24;
+  border-bottom: 1px solid #34345a;
+}
+
+#dev-tag-row label {
+  white-space: nowrap;
+  color: #a9b0e8;
+}
+
+#dev-amenity-palette {
+  display: flex;
+  gap: 6px;
+}
+
+.amenity-drag-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(0,0,0,0.5);
+  font-size: 11px;
+  font-weight: 600;
+  color: #12141a;
+  cursor: grab;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.amenity-drag-chip:active { cursor: grabbing; }
+
+.amenity-drag-chip .chip-symbol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.35);
+  font-size: 10px;
+}
+
+#dev-tag-status {
+  flex: 1;
+  color: #b0b8f0;
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+}
+
+#dev-tag-row button {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #34345a;
+  background: #23234a;
+  color: #b0b8f0;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+#map.drag-over-active {
+  outline: 3px dashed #8ea0d0;
+  outline-offset: -3px;
 }
 
 #dev-body {
@@ -405,6 +476,17 @@ html, body {
   margin-bottom: 6px;
 }
 .map-popup p { margin: 4px 0 0; font-size: 13px; color: #cfd4e0; }
+
+.amenity-point-remove {
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #5c4a2a;
+  background: #3a2e17;
+  color: #f0c987;
+  cursor: pointer;
+  font-size: 12px;
+}
 
 .marker-pin {
   display: flex;

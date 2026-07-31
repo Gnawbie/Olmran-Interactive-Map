@@ -1,6 +1,6 @@
-// Amenity types shown as badges on zones that have them. "repair" and "safe"
-// have no confirmed icon on the source map yet (see zone-amenities.js) — add
-// zones to ZONE_AMENITIES once those symbols are identified.
+// Amenity types shown as badges on zones that have them. "safe" (Safe Area)
+// has no confirmed icon on the source map yet (see zone-amenities.js) — add
+// zones to ZONE_AMENITIES once that symbol is identified.
 const AMENITY_TYPES = [
   { id: "hospital", label: "Hospital", symbol: "H", color: "#e0615c" },
   { id: "bank", label: "Bank", symbol: "B", color: "#e0b64c" },
