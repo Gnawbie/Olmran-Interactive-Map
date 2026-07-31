@@ -1,0 +1,245 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #1b1b1b;
+  overflow: hidden;
+}
+
+#map {
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #2b2b2b;
+}
+
+#toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  z-index: 1000;
+  background: #14171c;
+  color: #e8e8e8;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  border-bottom: 2px solid #3a3f4b;
+}
+
+#title {
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+#search-wrap {
+  position: relative;
+  flex: 1;
+  max-width: 360px;
+}
+
+#search-box {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0f0f0;
+  font-size: 14px;
+}
+
+#search-box:focus {
+  outline: none;
+  border-color: #6c8cff;
+}
+
+#search-results {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  background: #20242e;
+  border: 1px solid #444a58;
+  border-radius: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: none;
+  z-index: 1001;
+}
+
+#search-results.visible { display: block; }
+
+.search-result {
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid #2c313d;
+}
+
+.search-result:last-child { border-bottom: none; }
+
+.search-result:hover, .search-result.active {
+  background: #3a4256;
+}
+
+.search-result .r-type {
+  float: right;
+  font-size: 11px;
+  color: #8ea0d0;
+  text-transform: uppercase;
+}
+
+#layer-select {
+  padding: 7px 8px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0f0f0;
+  font-size: 13px;
+}
+
+#filter-wrap {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  padding: 5px 10px;
+  border-radius: 14px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #cfd4e0;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.filter-chip.active {
+  background: #6c8cff;
+  border-color: #6c8cff;
+  color: #12141a;
+  font-weight: 600;
+}
+
+#dev-toggle {
+  margin-left: auto;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid #5c4a2a;
+  background: #3a2e17;
+  color: #f0c987;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#dev-toggle.active {
+  background: #f0c987;
+  color: #2a2000;
+}
+
+#dev-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 220px;
+  z-index: 1000;
+  background: #14171c;
+  border-top: 2px solid #5c4a2a;
+  color: #e8e8e8;
+  display: flex;
+  flex-direction: column;
+}
+
+#dev-panel.hidden { display: none; }
+
+#dev-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: #20180c;
+}
+
+#dev-header span { flex: 1; }
+
+#dev-header button {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #5c4a2a;
+  background: #3a2e17;
+  color: #f0c987;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#dev-output {
+  flex: 1;
+  margin: 0;
+  border: none;
+  background: #0e1015;
+  color: #9fe89f;
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+  padding: 10px 12px;
+  resize: none;
+}
+
+.hidden { display: none !important; }
+
+/* Leaflet popup theming */
+.leaflet-popup-content-wrapper {
+  background: #1e222b;
+  color: #eee;
+  border-radius: 8px;
+}
+.leaflet-popup-tip { background: #1e222b; }
+.map-popup h3 { margin: 0 0 4px; font-size: 15px; }
+.map-popup .p-type {
+  display: inline-block;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #8ea0d0;
+  margin-bottom: 6px;
+}
+.map-popup p { margin: 4px 0 0; font-size: 13px; color: #cfd4e0; }
+
+.marker-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: #6c8cff;
+  border: 2px solid #14171c;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+.marker-pin span {
+  transform: rotate(45deg);
+  font-size: 12px;
+  font-weight: 700;
+  color: #12141a;
+}
+
+.zone-flash {
+  stroke: #ffd76c;
+  stroke-width: 3;
+  fill: #ffd76c;
+  fill-opacity: 0.15;
+}
