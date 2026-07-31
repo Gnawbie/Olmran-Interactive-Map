@@ -43,6 +43,14 @@
     <button id="dev-clear">Clear</button>
     <button id="dev-close">×</button>
   </div>
+  <div id="dev-recenter-row">
+    <label for="dev-zone-target">Re-center zone on click</label>
+    <select id="dev-zone-target">
+      <option value="">— none, just log points —</option>
+    </select>
+    <span id="dev-recenter-status"></span>
+    <button id="dev-export-zones">Copy Updated zones.js</button>
+  </div>
   <div id="dev-body">
     <div id="dev-points"></div>
     <textarea id="dev-output" readonly placeholder="Clicked points will appear here as JSON..."></textarea>

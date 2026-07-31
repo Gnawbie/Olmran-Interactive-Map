@@ -8,6 +8,8 @@
   let devPickerActive = false;
   const devPoints = [];
   const activeTypeFilters = new Set();
+  let recenterTargetName = "";
+  const modifiedZoneNames = new Set();
 
   const map = L.map("map", {
     crs: L.CRS.Simple,
@@ -316,9 +318,58 @@
     map.getContainer().style.cursor = devPickerActive ? "crosshair" : "";
   }
 
+  // ---- Dev: re-center a zone by clicking the map ----
+  function renderDevZoneTargetSelect() {
+    const select = document.getElementById("dev-zone-target");
+    [...ZONES]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(zone => {
+        const opt = document.createElement("option");
+        opt.value = zone.name;
+        opt.textContent = zone.name;
+        select.appendChild(opt);
+      });
+  }
+
+  function findZoneByName(name) {
+    return ZONES.find(z => z.name === name);
+  }
+
+  function updateRecenterStatus() {
+    const status = document.getElementById("dev-recenter-status");
+    if (!recenterTargetName) {
+      status.textContent = "";
+      return;
+    }
+    const zone = findZoneByName(recenterTargetName);
+    const dirty = modifiedZoneNames.has(recenterTargetName) ? " (moved)" : "";
+    status.textContent = zone ? `x:${zone.x} y:${zone.y}${dirty}` : "";
+  }
+
+  function formatZonesFile(zones) {
+    const lines = zones.map(z => {
+      const fields = [`name: ${JSON.stringify(z.name)}`, `layer: ${JSON.stringify(z.layer)}`, `x: ${Math.round(z.x)}`, `y: ${Math.round(z.y)}`];
+      return `  { ${fields.join(", ")} }`;
+    });
+    return `const ZONES = [\n${lines.join(",\n")}\n];\n`;
+  }
+
   map.on("click", (e) => {
     if (!devPickerActive) return;
     const { x, y } = latLngToXY(e.latlng);
+
+    if (recenterTargetName) {
+      const zone = findZoneByName(recenterTargetName);
+      if (zone) {
+        zone.x = x;
+        zone.y = y;
+        modifiedZoneNames.add(recenterTargetName);
+        updateRecenterStatus();
+        flashAt(x, y);
+      }
+      return;
+    }
+
     devPoints.push({ layer: currentLayerId, x, y });
     renderDevPoints();
     updateDevOutput();
@@ -339,6 +390,17 @@
     const link = buildViewLink(currentLayerId, x, y, map.getZoom());
     copyToClipboard(link, (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
   });
+  document.getElementById("dev-zone-target").addEventListener("change", (e) => {
+    recenterTargetName = e.target.value;
+    updateRecenterStatus();
+    if (recenterTargetName) {
+      const zone = findZoneByName(recenterTargetName);
+      if (zone) goTo(zone);
+    }
+  });
+  document.getElementById("dev-export-zones").addEventListener("click", (e) => {
+    copyToClipboard(formatZonesFile(ZONES), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
+  });
   document.getElementById("search-box").addEventListener("input", (e) => runSearch(e.target.value));
   document.getElementById("search-box").addEventListener("focus", (e) => runSearch(e.target.value));
   document.addEventListener("click", (e) => {
@@ -348,6 +410,7 @@
   });
 
   renderZoneSelect();
+  renderDevZoneTargetSelect();
   renderLayerSelect();
   renderFilterChips();
   renderDevPoints();
