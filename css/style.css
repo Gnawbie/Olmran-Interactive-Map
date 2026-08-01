@@ -144,6 +144,32 @@ html, body {
   gap: 4px;
 }
 
+.amenity-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #8ea0d0;
+  border-radius: 4px;
+}
+
+.amenity-group-header:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.amenity-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 10px;
+  margin-top: 2px;
+}
+
 .amenity-legend-row {
   display: flex;
   align-items: center;

@@ -706,24 +706,65 @@
     return `const AMENITY_POINTS = [\n${lines.join(",\n")}\n];\n`;
   }
 
+  const collapsedAmenityGroups = new Set();
+
+  function renderAmenityLegendRow(def) {
+    const row = document.createElement("div");
+    const hidden = hiddenAmenityTypes.has(def.id);
+    row.className = "amenity-legend-row" + (hidden ? " legend-hidden" : "");
+    row.title = hidden ? `Click to show ${def.label} on the map` : `Click to hide ${def.label} on the map`;
+    const badgeClass = "amenity-badge" + (def.symbol.length > 1 ? " badge-wide" : "");
+    row.innerHTML = `<span class="${badgeClass}" style="background:${def.color}">${def.symbol}</span><span>${def.label}</span>`;
+    row.addEventListener("click", () => {
+      if (hiddenAmenityTypes.has(def.id)) hiddenAmenityTypes.delete(def.id);
+      else hiddenAmenityTypes.add(def.id);
+      renderAmenityLegend();
+      renderAmenityBadges();
+    });
+    return row;
+  }
+
   function renderAmenityLegend() {
     const wrap = document.getElementById("amenity-legend");
     wrap.innerHTML = "";
-    AMENITY_TYPES.filter(def => !def.hidden && amenityAllowedOnCurrentLayer(def)).forEach(def => {
-      const row = document.createElement("div");
-      const hidden = hiddenAmenityTypes.has(def.id);
-      row.className = "amenity-legend-row" + (hidden ? " legend-hidden" : "");
-      row.title = hidden ? `Click to show ${def.label} on the map` : `Click to hide ${def.label} on the map`;
-      const badgeClass = "amenity-badge" + (def.symbol.length > 1 ? " badge-wide" : "");
-      row.innerHTML = `<span class="${badgeClass}" style="background:${def.color}">${def.symbol}</span><span>${def.label}</span>`;
-      row.addEventListener("click", () => {
-        if (hiddenAmenityTypes.has(def.id)) hiddenAmenityTypes.delete(def.id);
-        else hiddenAmenityTypes.add(def.id);
+    const visible = AMENITY_TYPES.filter(def => !def.hidden && amenityAllowedOnCurrentLayer(def));
+
+    AMENITY_GROUPS.forEach(group => {
+      const members = visible.filter(def => def.group === group.id);
+      if (members.length === 0) return;
+
+      const collapsed = collapsedAmenityGroups.has(group.id);
+      const section = document.createElement("div");
+      section.className = "amenity-group";
+
+      const header = document.createElement("div");
+      header.className = "amenity-group-header";
+      header.title = collapsed ? `Click to expand and show ${group.label} on the map` : `Click to collapse and hide ${group.label} on the map`;
+      header.innerHTML = `<button class="mini-collapse-btn${collapsed ? " collapsed" : ""}" title="Expand/collapse">▼</button><span>${group.label}</span>`;
+      header.addEventListener("click", () => {
+        if (collapsedAmenityGroups.has(group.id)) {
+          collapsedAmenityGroups.delete(group.id);
+          members.forEach(def => hiddenAmenityTypes.delete(def.id));
+        } else {
+          collapsedAmenityGroups.add(group.id);
+          members.forEach(def => hiddenAmenityTypes.add(def.id));
+        }
         renderAmenityLegend();
         renderAmenityBadges();
       });
-      wrap.appendChild(row);
+      section.appendChild(header);
+
+      if (!collapsed) {
+        const body = document.createElement("div");
+        body.className = "amenity-group-body";
+        members.forEach(def => body.appendChild(renderAmenityLegendRow(def)));
+        section.appendChild(body);
+      }
+
+      wrap.appendChild(section);
     });
+
+    visible.filter(def => !def.group).forEach(def => wrap.appendChild(renderAmenityLegendRow(def)));
   }
 
   // ---- Zone Tier Reference (temporary lookup panel for drawing boundary boxes) ----
