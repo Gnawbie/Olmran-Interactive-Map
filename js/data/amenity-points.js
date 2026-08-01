@@ -26,5 +26,10 @@ const AMENITY_POINTS = [
   { type: "hospital", layer: "olmran-evil", x: 4243, y: 3118 },
   { type: "shop", layer: "olmran-evil", x: 4134, y: 3504 },
   { type: "shop", layer: "olmran-evil", x: 4394, y: 2124 },
-  { type: "shop", layer: "olmran-evil", x: 4271, y: 2253 }
+  { type: "shop", layer: "olmran-evil", x: 4271, y: 2253 },
+  { type: "good-boat", layer: "olmran-evil", x: 2790, y: 3000 },
+  { type: "chaos-boat", layer: "olmran-evil", x: 2806, y: 2999 },
+  { type: "kaid-boat", layer: "olmran-evil", x: 2979, y: 3544 },
+  { type: "evil-realm-boat", layer: "olmran-evil", x: 3016, y: 3544 },
+  { type: "airship", layer: "olmran-evil", x: 2837, y: 3155 }
 ];
