@@ -35,9 +35,11 @@ const AMENITY_POINTS = [
   { type: "shop", layer: "olmran-evil", x: 1290, y: 863 },
   { type: "hospital", layer: "olmran-evil", x: 1277, y: 864 },
   { type: "repair", layer: "olmran-evil", x: 1301, y: 864 },
-  { type: "hospital", layer: "olmran-evil", x: 2773, y: 3339 },
-  { type: "bank", layer: "olmran-evil", x: 2813, y: 3339 },
-  { type: "shop", layer: "olmran-evil", x: 2775, y: 3380 },
-  { type: "repair", layer: "olmran-evil", x: 2814, y: 3377 },
-  { type: "safe", layer: "olmran-evil", x: 2773, y: 3420 }
+  { type: "hospital", layer: "olmran-evil", x: 3056, y: 3295 },
+  { type: "bank", layer: "olmran-evil", x: 2801, y: 3327 },
+  { type: "shop", layer: "olmran-evil", x: 2819, y: 3327 },
+  { type: "repair", layer: "olmran-evil", x: 2782, y: 3327 },
+  { type: "safe", layer: "olmran-evil", x: 3041, y: 3295 },
+  { type: "trainer", layer: "olmran-evil", x: 3023, y: 3296 },
+  { type: "trainer", layer: "olmran-evil", x: 2993, y: 3645 }
 ];
