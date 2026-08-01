@@ -61,6 +61,8 @@
     const layer = layersById[layerId];
     if (!layer) return;
     currentLayerId = layerId;
+    const layerSelect = document.getElementById("layer-select");
+    if (layerSelect) layerSelect.value = layerId;
 
     const bounds = boundsForLayer(layer);
     const prevCenter = preserveView ? map.getCenter() : null;

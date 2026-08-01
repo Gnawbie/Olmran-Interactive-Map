@@ -32,3 +32,41 @@ The **Spells** sheet ended up with only 1 leftover row — the source data has
 zero Kaid-tagged spell entries (spells there are only ever tagged Chaos,
 Evil, or Good). If Kaid has its own spell list somewhere, it isn't in this
 column, and this sheet is basically empty now.
+
+---
+
+`Olmran_EvilGoodChaos_Equipment_and_Stats.xlsx` — the mirror image of the
+file above: a Kaid-*removed* cut of `Item List 2.xlsx` (the same underlying
+community spreadsheet), covering Chaos, Evil, and Good only.
+
+### What was removed
+
+- Whole sheets that were entirely about Kaid: **Kaid Maps**, **Best Kaid
+  Gear**.
+- Rows tagged `Kaid`, `Kaid Green`, `Kaid Purple`, `Kaid Red`, or `Kaid White`
+  in the `Realm` column of: **Equipment**, **Enchant & Craft Mats**,
+  **MobList**, **Gear Tier Guide**, **Spells**, **Scribe List**.
+
+### What was kept
+
+- Everything tagged `Chaos`, `Evil`, `Good`, or `Crafted - Chaos/Good/Evil`.
+- Realm-agnostic categories: `Crafted`, `Event`, `Glory Bea`, blank rows.
+- Sheets that aren't realm-specific to begin with, plus **Chaos/Evil/Good
+  Maps** and **Chaos/Evil/Good Hunting Guide**.
+- **Realm & Class Titles** was left untouched (no Kaid column to remove).
+
+### Heads up
+
+- Zone names were pulled from the **Equipment** sheet's `Area` column, only
+  (rows tagged `Class`, `Crafted`, `Obsolete`, or blank were excluded — those
+  aren't real locations). A few obvious typo/capitalization duplicates were
+  merged: `Island of MIngo` → `Island of Mingo`, `Fields of Mo'serat` →
+  `Fields of Mo'Serat`, `Shrouded Castle of Craebean` → `Shrouded Castle of
+  Craebaen` (standardized on the spelling used elsewhere, e.g. "Shrouded
+  City/Forest of Craebaen").
+- The Evil/Good/Chaos maps are brand new and have never been walked with the
+  coordinate picker, so all 151 zones pulled from this file were added to
+  `zones.js` at their map's center as a placeholder, ready to be repositioned
+  one at a time with the existing **Dev: Pick Coords → Re-center zone on
+  click** tool. Until that happens, "jump to zone" for any of them will just
+  center on the same spot each time.
