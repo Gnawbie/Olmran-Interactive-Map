@@ -6,4 +6,8 @@
 // reports.
 //
 // { type: "hospital", layer: "land-of-kaid", x: 1234, y: 567 }
-const AMENITY_POINTS = [];
+const AMENITY_POINTS = [
+  { type: "evil", layer: "land-of-kaid", x: 2458, y: 3830 },
+  { type: "chaos", layer: "land-of-kaid", x: 1774, y: 2636 },
+  { type: "good", layer: "land-of-kaid", x: 3770, y: 2208 }
+];
