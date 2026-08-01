@@ -467,6 +467,57 @@
     });
   }
 
+  // ---- Zone Tier Reference (temporary lookup panel for drawing boundary boxes) ----
+  const TIER_TAG_IDS = ["zone-white", "zone-green", "zone-red", "zone-purple"];
+
+  function renderZoneTierList(filterText) {
+    const wrap = document.getElementById("zone-tier-list");
+    wrap.innerHTML = "";
+    const q = (filterText || "").trim().toLowerCase();
+    [...ZONES]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .filter(z => !q || z.name.toLowerCase().includes(q))
+      .forEach(zone => {
+        const tags = (ZONE_AMENITIES[zone.name] || []).filter(t => TIER_TAG_IDS.includes(t));
+        const row = document.createElement("div");
+        row.className = "zone-tier-row";
+
+        const name = document.createElement("span");
+        name.className = "zt-name";
+        name.textContent = zone.name;
+        name.title = zone.name;
+        row.appendChild(name);
+
+        if (tags.length === 0) {
+          const none = document.createElement("span");
+          none.className = "zt-none";
+          none.textContent = "no tier";
+          row.appendChild(none);
+        } else {
+          const swatches = document.createElement("span");
+          swatches.className = "zt-swatches";
+          tags.forEach(t => {
+            const def = amenityDef(t);
+            const sw = document.createElement("span");
+            sw.className = "zt-swatch";
+            sw.style.background = def ? def.color : "#666";
+            sw.title = def ? def.label : t;
+            swatches.appendChild(sw);
+          });
+          row.appendChild(swatches);
+        }
+
+        row.title = zone.name;
+        row.addEventListener("click", () => goTo(zone));
+        wrap.appendChild(row);
+      });
+  }
+
+  function toggleZoneTierPanel(show) {
+    document.getElementById("zone-tier-panel").classList.toggle("hidden", !show);
+    if (show) renderZoneTierList(document.getElementById("zone-tier-search").value);
+  }
+
   function renderZoneSelect() {
     const select = document.getElementById("zone-select");
     const sorted = [...ZONES].sort((a, b) => a.name.localeCompare(b.name));
@@ -961,6 +1012,9 @@
   // ---- Wire up UI ----
   document.getElementById("dev-toggle").addEventListener("click", () => toggleDevPicker());
   document.getElementById("dev-close").addEventListener("click", () => toggleDevPicker(false));
+  document.getElementById("zone-tier-toggle-btn").addEventListener("click", () => toggleZoneTierPanel(true));
+  document.getElementById("zone-tier-close").addEventListener("click", () => toggleZoneTierPanel(false));
+  document.getElementById("zone-tier-search").addEventListener("input", (e) => renderZoneTierList(e.target.value));
   document.getElementById("dev-clear").addEventListener("click", () => {
     devPoints.length = 0;
     renderDevPoints();
@@ -1133,6 +1187,7 @@
   updateBoxStatus();
   renderDevPoints();
   makeDraggable(document.getElementById("control-box"), document.getElementById("control-box-header"), "controlBoxPosition");
+  makeDraggable(document.getElementById("zone-tier-panel"), document.getElementById("zone-tier-header"), "zoneTierPanelPosition");
   loadDevSession();
   updateAuthUI();
   if (!applyViewFromUrl()) {
