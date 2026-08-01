@@ -25,6 +25,7 @@ const AMENITY_TYPES = [
   { id: "good-boat", label: "Good Boat", symbol: "Bg", color: "#8ab4f8", layers: ["olmran-evil", "olmran-chaos"], group: "invasion-boats" },
   { id: "chaos-boat", label: "Chaos Boat", symbol: "Bc", color: "#81c995", layers: ["olmran-evil", "olmran-good"], group: "invasion-boats" },
   { id: "airship", label: "Airship", symbol: "A", color: "#f0f0f0", layers: ["olmran-evil", "olmran-good", "olmran-chaos"], group: "tickets" },
+  { id: "trainer", label: "Trainer", symbol: "Tr", color: "#c8c8c8", layers: ["olmran-evil", "olmran-good", "olmran-chaos"] },
   { id: "boss", label: "Boss", symbol: "B", color: "#f97316" },
   { id: "hospital", label: "Hospital", symbol: "H", color: "#e0615c" },
   { id: "bank", label: "Bank", symbol: "B", color: "#e0b64c" },
