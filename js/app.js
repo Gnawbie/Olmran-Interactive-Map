@@ -650,6 +650,11 @@
     return `${value}`;
   }
 
+  function weightPart(value) {
+    if (value === null || value === undefined || value === "") return null;
+    return `${value} lbs`;
+  }
+
   function sigilPart(it) {
     if (!it.sigil) return null;
     return `Sigil: ${it.sigil}${it.sigilLvl != null ? " " + it.sigilLvl : ""}`;
@@ -667,8 +672,8 @@
         valuePart(it.spell),
         fieldPart("Damage", it.damage),
         fieldPart("Fumble", it.fumble),
-        fieldPart("Weight", it.weight),
-        fieldPart("Accuracy", it.accuracy),
+        weightPart(it.weight),
+        fieldPart("Acc", it.accuracy),
         sigilPart(it),
       ];
     } else if (cat === "edible") {
@@ -676,7 +681,7 @@
     } else {
       parts = [
         valuePart(it.spell),
-        fieldPart("Defense", it.defense),
+        fieldPart("Def", it.defense),
         sigilPart(it),
         valuePart(it.slot),
         valuePart(it.type),
