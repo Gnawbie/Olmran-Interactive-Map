@@ -882,6 +882,46 @@ html, body {
   font-size: 11px;
 }
 
+#dev-grey-area-row, #dev-line-row, #dev-text-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  background: #1a2024;
+  border-bottom: 1px solid #2a4a5c;
+  flex-wrap: wrap;
+}
+
+#dev-grey-area-row label, #dev-line-row label, #dev-text-row label {
+  white-space: nowrap;
+  color: #a9d0e8;
+}
+
+#dev-grey-area-row button, #dev-line-row button, #dev-text-row button {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #2a4a5c;
+  background: #1f2a34;
+  color: #a9d0e8;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+#dev-grey-area-row button.active, #dev-line-row button.active, #dev-text-row button.active {
+  background: #a9d0e8;
+  color: #1f2a34;
+}
+
+#grey-area-status, #line-status, #text-status {
+  flex: 1;
+  min-width: 120px;
+  color: #a9d0e8;
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+}
+
 #dev-body {
   flex: 1;
   display: flex;
@@ -1085,6 +1125,54 @@ html, body {
 .user-icon-lock-btn {
   background: #4a4a52;
   color: #f0f0f0;
+}
+
+/* Dev-placed text labels -- best-effort recreation of the maps' own
+   lettering style using the closest available Google Font (IM Fell
+   English), not a pixel-exact match to the original custom font. */
+.map-text-label {
+  font-family: 'IM Fell English', Georgia, serif;
+  color: #1a1a1a;
+  white-space: nowrap;
+  cursor: move;
+  transform: translate(-50%, -50%);
+  text-shadow: 0 1px 2px rgba(255,255,255,0.7), 0 0 6px rgba(255,255,255,0.4);
+  user-select: none;
+  line-height: 1;
+}
+
+.text-label-input {
+  width: 100%;
+  min-height: 50px;
+  margin-top: 6px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0f0f0;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.text-label-size-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #cfd4e0;
+}
+
+.text-label-size-input {
+  width: 60px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0f0f0;
+  font-size: 12px;
 }
 
 /* Leaflet popup theming */

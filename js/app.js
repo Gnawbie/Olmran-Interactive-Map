@@ -26,6 +26,16 @@
   let userIconLayerGroup = L.layerGroup();
   let armedUserIconType = null;
   const USER_ICONS = loadUserIcons();
+  let greyAreaLayerGroup = L.layerGroup();
+  let greyAreaPreviewLayer = null;
+  let greyAreaDrawActive = false;
+  let currentGreyAreaPoints = [];
+  let lineLayerGroup = L.layerGroup();
+  let linePreviewLayer = null;
+  let lineDrawActive = false;
+  let currentLinePoints = [];
+  let textLabelLayerGroup = L.layerGroup();
+  let textPlacementActive = false;
 
   const map = L.map("map", {
     crs: L.CRS.Simple,
@@ -91,6 +101,9 @@
     renderAmenityBadges();
     renderTierPaths();
     renderBoundaryAreas();
+    renderGreyAreas();
+    renderLinePaths();
+    renderTextLabels();
     renderUserIcons();
     renderUserIconPalette();
     renderZoneSelect();
@@ -437,7 +450,7 @@
   }
 
   function updateMapCursor() {
-    map.getContainer().style.cursor = (tracingActive || devPickerActive || areaDrawActive) ? "crosshair" : "";
+    map.getContainer().style.cursor = (tracingActive || devPickerActive || areaDrawActive || greyAreaDrawActive || lineDrawActive || textPlacementActive) ? "crosshair" : "";
   }
 
   // Toolbar height varies (wraps to multiple rows on narrow/mobile screens,
@@ -669,6 +682,311 @@
       return `  { tier: ${JSON.stringify(a.tier)}, layer: ${JSON.stringify(a.layer)}, points: [${pts}] }`;
     });
     return `const BOUNDARY_AREAS = [\n${lines.join(",\n")}\n];\n`;
+  }
+
+  // ---- Dev: grey area tool (flat tint over everything inside, unlike
+  // BOUNDARY_AREAS which only recolors white pixels) ----
+  function renderGreyAreas() {
+    greyAreaLayerGroup.clearLayers();
+    GREY_AREAS.filter(a => a.layer === currentLayerId).forEach(area => {
+      const latlngs = area.points.map(([x, y]) => xyToLatLng(x, y));
+      const polygon = L.polygon(latlngs, { color: "#8a8a8a", weight: 1, fillColor: "#8a8a8a", fillOpacity: 0.45, interactive: true });
+      const content = document.createElement("div");
+      content.className = "map-popup";
+      const h3 = document.createElement("h3");
+      h3.textContent = "Grey Area";
+      const p = document.createElement("p");
+      p.textContent = `${area.points.length} points`;
+      content.appendChild(h3);
+      content.appendChild(p);
+      const removeBtn = document.createElement("button");
+      removeBtn.textContent = "Remove";
+      removeBtn.className = "amenity-point-remove";
+      removeBtn.addEventListener("click", () => {
+        const idx = GREY_AREAS.indexOf(area);
+        if (idx !== -1) GREY_AREAS.splice(idx, 1);
+        renderGreyAreas();
+        updateGreyAreaStatus();
+      });
+      content.appendChild(removeBtn);
+      polygon.bindPopup(content);
+      greyAreaLayerGroup.addLayer(polygon);
+    });
+    greyAreaLayerGroup.addTo(map);
+    setGreyAreaOverlaysInteractive(!greyAreaDrawActive);
+  }
+
+  function setGreyAreaOverlaysInteractive(interactive) {
+    greyAreaLayerGroup.eachLayer(layer => {
+      const el = layer.getElement && layer.getElement();
+      if (el) el.style.pointerEvents = interactive ? "" : "none";
+    });
+  }
+
+  function clearGreyAreaPreview() {
+    if (greyAreaPreviewLayer) {
+      map.removeLayer(greyAreaPreviewLayer);
+      greyAreaPreviewLayer = null;
+    }
+  }
+
+  function updateGreyAreaPreview() {
+    clearGreyAreaPreview();
+    if (currentGreyAreaPoints.length === 0) return;
+    const group = L.layerGroup();
+    const latlngs = currentGreyAreaPoints.map(([x, y]) => xyToLatLng(x, y));
+    if (latlngs.length > 1) {
+      L.polygon(latlngs, { color: "#ffd76c", weight: 3, dashArray: "6,6", fillOpacity: 0.08 }).addTo(group);
+    }
+    latlngs.forEach(ll => {
+      L.circleMarker(ll, { radius: 4, color: "#ffd76c", fillColor: "#ffd76c", fillOpacity: 1 }).addTo(group);
+    });
+    greyAreaPreviewLayer = group;
+    greyAreaPreviewLayer.addTo(map);
+  }
+
+  function updateGreyAreaStatus() {
+    const el = document.getElementById("grey-area-status");
+    if (!greyAreaDrawActive) {
+      el.textContent = `${GREY_AREAS.length} area(s) saved`;
+      return;
+    }
+    el.textContent = currentGreyAreaPoints.length < 3
+      ? `${currentGreyAreaPoints.length} point(s) — need at least 3 to save`
+      : `${currentGreyAreaPoints.length} point(s) — click Save as Grey (auto-closes), or Undo/Cancel`;
+  }
+
+  function toggleGreyAreaDraw(forceState) {
+    const next = forceState !== undefined ? forceState : !greyAreaDrawActive;
+    if (next && !devSession) return;
+    greyAreaDrawActive = next;
+    document.getElementById("grey-area-toggle-btn").textContent = greyAreaDrawActive ? "Stop Grey Area" : "Start Grey Area";
+    document.getElementById("grey-area-toggle-btn").classList.toggle("active", greyAreaDrawActive);
+    if (!greyAreaDrawActive) {
+      currentGreyAreaPoints = [];
+      clearGreyAreaPreview();
+    }
+    setGreyAreaOverlaysInteractive(!greyAreaDrawActive);
+    updateMapCursor();
+    updateGreyAreaStatus();
+  }
+
+  function formatGreyAreasFile(areas) {
+    const lines = areas.map(a => {
+      const pts = a.points.map(([x, y]) => `[${Math.round(x)}, ${Math.round(y)}]`).join(", ");
+      return `  { layer: ${JSON.stringify(a.layer)}, points: [${pts}] }`;
+    });
+    return `const GREY_AREAS = [\n${lines.join(",\n")}\n];\n`;
+  }
+
+  // ---- Dev: general-purpose thin line tool ----
+  function renderLinePaths() {
+    lineLayerGroup.clearLayers();
+    LINE_PATHS.filter(p => p.layer === currentLayerId).forEach(line => {
+      const latlngs = line.points.map(([x, y]) => xyToLatLng(x, y));
+      const polyline = L.polyline(latlngs, { color: "#2a2a2a", weight: 2, interactive: true });
+      const content = document.createElement("div");
+      content.className = "map-popup";
+      const h3 = document.createElement("h3");
+      h3.textContent = "Line";
+      const p = document.createElement("p");
+      p.textContent = `${line.points.length} points`;
+      content.appendChild(h3);
+      content.appendChild(p);
+      const removeBtn = document.createElement("button");
+      removeBtn.textContent = "Remove";
+      removeBtn.className = "amenity-point-remove";
+      removeBtn.addEventListener("click", () => {
+        const idx = LINE_PATHS.indexOf(line);
+        if (idx !== -1) LINE_PATHS.splice(idx, 1);
+        renderLinePaths();
+        updateLineStatus();
+      });
+      content.appendChild(removeBtn);
+      polyline.bindPopup(content);
+      lineLayerGroup.addLayer(polyline);
+    });
+    lineLayerGroup.addTo(map);
+    setLineOverlaysInteractive(!lineDrawActive);
+  }
+
+  function setLineOverlaysInteractive(interactive) {
+    lineLayerGroup.eachLayer(layer => {
+      const el = layer.getElement && layer.getElement();
+      if (el) el.style.pointerEvents = interactive ? "" : "none";
+    });
+  }
+
+  function clearLinePreview() {
+    if (linePreviewLayer) {
+      map.removeLayer(linePreviewLayer);
+      linePreviewLayer = null;
+    }
+  }
+
+  function updateLinePreview() {
+    clearLinePreview();
+    if (currentLinePoints.length === 0) return;
+    const group = L.layerGroup();
+    const latlngs = currentLinePoints.map(([x, y]) => xyToLatLng(x, y));
+    if (latlngs.length > 1) {
+      L.polyline(latlngs, { color: "#ffd76c", weight: 3, dashArray: "6,6" }).addTo(group);
+    }
+    latlngs.forEach(ll => {
+      L.circleMarker(ll, { radius: 4, color: "#ffd76c", fillColor: "#ffd76c", fillOpacity: 1 }).addTo(group);
+    });
+    linePreviewLayer = group;
+    linePreviewLayer.addTo(map);
+  }
+
+  function updateLineStatus() {
+    const el = document.getElementById("line-status");
+    if (!lineDrawActive) {
+      el.textContent = `${LINE_PATHS.length} line(s) saved`;
+      return;
+    }
+    el.textContent = currentLinePoints.length < 2
+      ? `${currentLinePoints.length} point(s) — need at least 2 to save`
+      : `${currentLinePoints.length} point(s) — click Save Line, or Undo/Cancel`;
+  }
+
+  function toggleLineDraw(forceState) {
+    const next = forceState !== undefined ? forceState : !lineDrawActive;
+    if (next && !devSession) return;
+    lineDrawActive = next;
+    document.getElementById("line-toggle-btn").textContent = lineDrawActive ? "Stop Line" : "Start Line";
+    document.getElementById("line-toggle-btn").classList.toggle("active", lineDrawActive);
+    if (!lineDrawActive) {
+      currentLinePoints = [];
+      clearLinePreview();
+    }
+    setLineOverlaysInteractive(!lineDrawActive);
+    updateMapCursor();
+    updateLineStatus();
+  }
+
+  function formatLinePathsFile(lines) {
+    const out = lines.map(p => {
+      const pts = p.points.map(([x, y]) => `[${Math.round(x)}, ${Math.round(y)}]`).join(", ");
+      return `  { layer: ${JSON.stringify(p.layer)}, points: [${pts}] }`;
+    });
+    return `const LINE_PATHS = [\n${out.join(",\n")}\n];\n`;
+  }
+
+  // ---- Dev: movable, resizable text labels ----
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function textLabelIcon(label) {
+    const fontSize = label.fontSize || 24;
+    return L.divIcon({
+      className: "",
+      html: `<div class="map-text-label" style="font-size:${fontSize}px">${escapeHtml(label.text)}</div>`,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0]
+    });
+  }
+
+  function buildTextLabelPopup(label, marker) {
+    const content = document.createElement("div");
+    content.className = "map-popup text-label-popup";
+
+    const h3 = document.createElement("h3");
+    h3.textContent = "Text Label";
+    content.appendChild(h3);
+
+    const textInput = document.createElement("textarea");
+    textInput.className = "text-label-input";
+    textInput.value = label.text;
+    content.appendChild(textInput);
+
+    const sizeRow = document.createElement("div");
+    sizeRow.className = "text-label-size-row";
+    const sizeLabel = document.createElement("label");
+    sizeLabel.textContent = "Size (px):";
+    const sizeInput = document.createElement("input");
+    sizeInput.type = "number";
+    sizeInput.min = "8";
+    sizeInput.max = "96";
+    sizeInput.value = label.fontSize || 24;
+    sizeInput.className = "text-label-size-input";
+    sizeRow.appendChild(sizeLabel);
+    sizeRow.appendChild(sizeInput);
+    content.appendChild(sizeRow);
+
+    const actions = document.createElement("div");
+    actions.className = "user-icon-popup-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "user-icon-save-btn";
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", () => {
+      label.text = textInput.value;
+      label.fontSize = parseInt(sizeInput.value, 10) || 24;
+      marker.setIcon(textLabelIcon(label));
+      flashButton(saveBtn, "Saved!");
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "user-icon-remove-btn";
+    removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", () => {
+      const idx = TEXT_LABELS.indexOf(label);
+      if (idx !== -1) TEXT_LABELS.splice(idx, 1);
+      map.closePopup();
+      renderTextLabels();
+      updateTextStatus();
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(removeBtn);
+    content.appendChild(actions);
+    return content;
+  }
+
+  function renderTextLabels() {
+    textLabelLayerGroup.clearLayers();
+    TEXT_LABELS
+      .filter(label => label.layer === currentLayerId)
+      .forEach(label => {
+        const marker = L.marker(xyToLatLng(label.x, label.y), {
+          icon: textLabelIcon(label),
+          draggable: !!devSession
+        });
+        marker.on("dragend", () => {
+          const raw = latLngToXY(marker.getLatLng());
+          const { x, y } = clampToLayerBounds(label.layer, raw.x, raw.y);
+          label.x = x;
+          label.y = y;
+        });
+        marker.bindPopup(buildTextLabelPopup(label, marker));
+        textLabelLayerGroup.addLayer(marker);
+      });
+    textLabelLayerGroup.addTo(map);
+  }
+
+  function updateTextStatus() {
+    document.getElementById("text-status").textContent = `${TEXT_LABELS.length} label(s) saved`;
+  }
+
+  function toggleTextPlacement(forceState) {
+    const next = forceState !== undefined ? forceState : !textPlacementActive;
+    if (next && !devSession) return;
+    textPlacementActive = next;
+    document.getElementById("text-add-btn").textContent = textPlacementActive ? "Click map to place…" : "Start Text";
+    document.getElementById("text-add-btn").classList.toggle("active", textPlacementActive);
+    updateMapCursor();
+  }
+
+  function formatTextLabelsFile(labels) {
+    const lines = labels.map(l => {
+      const fields = [`text: ${JSON.stringify(l.text)}`, `layer: ${JSON.stringify(l.layer)}`, `x: ${Math.round(l.x)}`, `y: ${Math.round(l.y)}`, `fontSize: ${l.fontSize || 24}`];
+      return `  { ${fields.join(", ")} }`;
+    });
+    return `const TEXT_LABELS = [\n${lines.join(",\n")}\n];\n`;
   }
 
   // ---- Dev: drag-and-drop amenity tagging ----
@@ -1318,6 +1636,9 @@
       toggleDevPicker(false);
       toggleTracing(false);
       toggleAreaDraw(false);
+      toggleGreyAreaDraw(false);
+      toggleLineDraw(false);
+      toggleTextPlacement(false);
     }
     renderAmenityBadges();
   }
@@ -1437,6 +1758,38 @@
       currentAreaPoints.push([x, y]);
       updateAreaPreview();
       updateAreaStatus();
+      return;
+    }
+
+    if (greyAreaDrawActive) {
+      const raw = latLngToXY(e.latlng);
+      const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
+      currentGreyAreaPoints.push([x, y]);
+      updateGreyAreaPreview();
+      updateGreyAreaStatus();
+      return;
+    }
+
+    if (lineDrawActive) {
+      const raw = latLngToXY(e.latlng);
+      const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
+      currentLinePoints.push([x, y]);
+      updateLinePreview();
+      updateLineStatus();
+      return;
+    }
+
+    if (textPlacementActive) {
+      const raw = latLngToXY(e.latlng);
+      const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
+      const text = window.prompt("Label text:", "");
+      if (text && text.trim()) {
+        TEXT_LABELS.push({ text: text.trim(), layer: currentLayerId, x, y, fontSize: 24 });
+        renderTextLabels();
+        updateTextStatus();
+        flashAt(x, y);
+      }
+      toggleTextPlacement(false);
       return;
     }
 
@@ -1573,6 +1926,55 @@
   document.getElementById("area-export-btn").addEventListener("click", (e) => {
     copyToClipboard(formatBoundaryAreasFile(BOUNDARY_AREAS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
   });
+  document.getElementById("grey-area-toggle-btn").addEventListener("click", () => toggleGreyAreaDraw());
+  document.getElementById("grey-area-undo-btn").addEventListener("click", () => {
+    currentGreyAreaPoints.pop();
+    updateGreyAreaPreview();
+    updateGreyAreaStatus();
+  });
+  document.getElementById("grey-area-cancel-btn").addEventListener("click", () => {
+    currentGreyAreaPoints = [];
+    clearGreyAreaPreview();
+    updateGreyAreaStatus();
+  });
+  document.getElementById("grey-area-save-btn").addEventListener("click", () => {
+    if (currentGreyAreaPoints.length < 3) return;
+    GREY_AREAS.push({ layer: currentLayerId, points: currentGreyAreaPoints.slice() });
+    currentGreyAreaPoints = [];
+    clearGreyAreaPreview();
+    updateGreyAreaStatus();
+    renderGreyAreas();
+  });
+  document.getElementById("grey-area-export-btn").addEventListener("click", (e) => {
+    copyToClipboard(formatGreyAreasFile(GREY_AREAS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
+  });
+  document.getElementById("line-toggle-btn").addEventListener("click", () => toggleLineDraw());
+  document.getElementById("line-undo-btn").addEventListener("click", () => {
+    currentLinePoints.pop();
+    updateLinePreview();
+    updateLineStatus();
+  });
+  document.getElementById("line-cancel-btn").addEventListener("click", () => {
+    currentLinePoints = [];
+    clearLinePreview();
+    updateLineStatus();
+  });
+  document.getElementById("line-save-btn").addEventListener("click", () => {
+    if (currentLinePoints.length < 2) return;
+    LINE_PATHS.push({ layer: currentLayerId, points: currentLinePoints.slice() });
+    currentLinePoints = [];
+    clearLinePreview();
+    updateLineStatus();
+    renderLinePaths();
+  });
+  document.getElementById("line-export-btn").addEventListener("click", (e) => {
+    copyToClipboard(formatLinePathsFile(LINE_PATHS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
+  });
+  document.getElementById("text-add-btn").addEventListener("click", () => toggleTextPlacement());
+  document.getElementById("text-cancel-btn").addEventListener("click", () => toggleTextPlacement(false));
+  document.getElementById("text-export-btn").addEventListener("click", (e) => {
+    copyToClipboard(formatTextLabelsFile(TEXT_LABELS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
+  });
   document.getElementById("search-box").addEventListener("input", (e) => runSearch(e.target.value));
   document.getElementById("search-box").addEventListener("focus", (e) => runSearch(e.target.value));
   document.addEventListener("click", (e) => {
@@ -1670,6 +2072,9 @@
   updateTagStatus();
   updateTraceStatus();
   updateAreaStatus();
+  updateGreyAreaStatus();
+  updateLineStatus();
+  updateTextStatus();
   renderDevPoints();
   makeDraggable(document.getElementById("control-box"), document.getElementById("control-box-header"), "controlBoxPosition");
   makeDraggable(document.getElementById("zone-tier-panel"), document.getElementById("zone-tier-header"), "zoneTierPanelPosition");

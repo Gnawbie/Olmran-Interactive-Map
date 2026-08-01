@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Land of Olmran — Interactive Map</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/style.css?v=36">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css?v=37">
 </head>
 <body>
 
@@ -122,6 +125,31 @@
     <span id="area-status"></span>
     <button id="area-export-btn">Copy Updated boundary-areas.js</button>
   </div>
+  <div id="dev-grey-area-row">
+    <label>Draw grey area (tints everything inside, ignores white)</label>
+    <button id="grey-area-toggle-btn">Start Grey Area</button>
+    <button id="grey-area-undo-btn">Undo Point</button>
+    <button id="grey-area-cancel-btn">Cancel</button>
+    <button id="grey-area-save-btn">Save as Grey</button>
+    <span id="grey-area-status"></span>
+    <button id="grey-area-export-btn">Copy Updated grey-areas.js</button>
+  </div>
+  <div id="dev-line-row">
+    <label>Draw thin line</label>
+    <button id="line-toggle-btn">Start Line</button>
+    <button id="line-undo-btn">Undo Point</button>
+    <button id="line-cancel-btn">Cancel</button>
+    <button id="line-save-btn">Save Line</button>
+    <span id="line-status"></span>
+    <button id="line-export-btn">Copy Updated line-paths.js</button>
+  </div>
+  <div id="dev-text-row">
+    <label>Add text label</label>
+    <button id="text-add-btn">Start Text</button>
+    <button id="text-cancel-btn">Cancel</button>
+    <span id="text-status"></span>
+    <button id="text-export-btn">Copy Updated text-labels.js</button>
+  </div>
   <div id="dev-body">
     <div id="dev-points"></div>
     <textarea id="dev-output" readonly placeholder="Clicked points will appear here as JSON..."></textarea>
@@ -169,17 +197,20 @@
   always get the latest version instead of a stale cached copy.
 -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/data/layers.js?v=36"></script>
-<script src="js/data/zones.js?v=36"></script>
-<script src="js/data/markers.js?v=36"></script>
-<script src="js/data/amenities.js?v=36"></script>
-<script src="js/data/zone-amenities.js?v=36"></script>
-<script src="js/data/amenity-points.js?v=36"></script>
-<script src="js/data/user-icon-types.js?v=36"></script>
-<script src="js/data/tier-paths.js?v=36"></script>
-<script src="js/data/boundary-areas.js?v=36"></script>
-<script src="js/data/zone-items.js?v=36"></script>
-<script src="js/data/dev-accounts.js?v=36"></script>
-<script src="js/app.js?v=36"></script>
+<script src="js/data/layers.js?v=37"></script>
+<script src="js/data/zones.js?v=37"></script>
+<script src="js/data/markers.js?v=37"></script>
+<script src="js/data/amenities.js?v=37"></script>
+<script src="js/data/zone-amenities.js?v=37"></script>
+<script src="js/data/amenity-points.js?v=37"></script>
+<script src="js/data/user-icon-types.js?v=37"></script>
+<script src="js/data/tier-paths.js?v=37"></script>
+<script src="js/data/boundary-areas.js?v=37"></script>
+<script src="js/data/grey-areas.js?v=37"></script>
+<script src="js/data/line-paths.js?v=37"></script>
+<script src="js/data/text-labels.js?v=37"></script>
+<script src="js/data/zone-items.js?v=37"></script>
+<script src="js/data/dev-accounts.js?v=37"></script>
+<script src="js/app.js?v=37"></script>
 </body>
 </html>
