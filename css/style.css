@@ -113,6 +113,23 @@ html, body {
   gap: 8px;
   font-size: 12px;
   color: #cfd4e0;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.amenity-legend-row:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.amenity-legend-row.legend-hidden {
+  opacity: 0.4;
+}
+
+.amenity-legend-row.legend-hidden .amenity-badge {
+  background: #555 !important;
+  filter: grayscale(1);
 }
 
 .amenity-badge {

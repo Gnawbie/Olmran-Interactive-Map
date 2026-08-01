@@ -9,6 +9,7 @@
   let devPickerActive = false;
   const devPoints = [];
   const activeTypeFilters = new Set();
+  const hiddenAmenityTypes = new Set();
   let recenterTargetName = "";
   const modifiedZoneNames = new Set();
   let devSession = null; // { username, role }
@@ -157,8 +158,9 @@
 
   function renderAmenityBadges() {
     amenityLayerGroup.clearLayers();
-    Object.entries(ZONE_AMENITIES).forEach(([zoneName, amenityIds]) => {
+    Object.entries(ZONE_AMENITIES).forEach(([zoneName, allAmenityIds]) => {
       const zone = findZoneByName(zoneName);
+      const amenityIds = allAmenityIds.filter(id => !hiddenAmenityTypes.has(id));
       if (!zone || zone.layer !== currentLayerId || amenityIds.length === 0) return;
       const marker = L.marker(xyToLatLng(zone.x, zone.y), { icon: amenityBadgeIcon(amenityIds) });
       const labels = amenityIds.map(id => amenityDef(id)).filter(Boolean).map(def => def.label).join(", ");
@@ -167,7 +169,7 @@
     });
 
     AMENITY_POINTS
-      .filter(p => p.layer === currentLayerId)
+      .filter(p => p.layer === currentLayerId && !hiddenAmenityTypes.has(p.type))
       .forEach(p => {
         const def = amenityDef(p.type);
         const marker = L.marker(xyToLatLng(p.x, p.y), { icon: amenityPointIcon(p.type) });
@@ -226,8 +228,16 @@
     wrap.innerHTML = "";
     AMENITY_TYPES.forEach(def => {
       const row = document.createElement("div");
-      row.className = "amenity-legend-row";
+      const hidden = hiddenAmenityTypes.has(def.id);
+      row.className = "amenity-legend-row" + (hidden ? " legend-hidden" : "");
+      row.title = hidden ? `Click to show ${def.label} on the map` : `Click to hide ${def.label} on the map`;
       row.innerHTML = `<span class="amenity-badge" style="background:${def.color}">${def.symbol}</span><span>${def.label}</span>`;
+      row.addEventListener("click", () => {
+        if (hiddenAmenityTypes.has(def.id)) hiddenAmenityTypes.delete(def.id);
+        else hiddenAmenityTypes.add(def.id);
+        renderAmenityLegend();
+        renderAmenityBadges();
+      });
       wrap.appendChild(row);
     });
   }
