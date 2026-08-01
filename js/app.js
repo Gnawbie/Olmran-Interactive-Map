@@ -645,6 +645,11 @@
     return `${label}: ${value}`;
   }
 
+  function valuePart(value) {
+    if (value === null || value === undefined || value === "") return null;
+    return `${value}`;
+  }
+
   function sigilPart(it) {
     if (!it.sigil) return null;
     return `Sigil: ${it.sigil}${it.sigilLvl != null ? " " + it.sigilLvl : ""}`;
@@ -655,11 +660,11 @@
     const cat = itemCategory(it);
     let parts;
     if (cat === "jewel") {
-      parts = [fieldPart("Spell", it.spell), sigilPart(it)];
+      parts = [valuePart(it.spell), sigilPart(it)];
     } else if (cat === "weapon") {
       parts = [
-        fieldPart("Type", it.type),
-        fieldPart("Spell", it.spell),
+        valuePart(it.type),
+        valuePart(it.spell),
         fieldPart("Damage", it.damage),
         fieldPart("Fumble", it.fumble),
         fieldPart("Weight", it.weight),
@@ -667,14 +672,14 @@
         sigilPart(it),
       ];
     } else if (cat === "edible") {
-      parts = ["Edible", fieldPart("Spell", it.spell)];
+      parts = ["Edible", valuePart(it.spell)];
     } else {
       parts = [
-        fieldPart("Spell", it.spell),
+        valuePart(it.spell),
         fieldPart("Defense", it.defense),
         sigilPart(it),
-        fieldPart("Slot", it.slot),
-        fieldPart("Type", it.type),
+        valuePart(it.slot),
+        valuePart(it.type),
       ];
     }
     return parts.filter(Boolean).join(" · ");
