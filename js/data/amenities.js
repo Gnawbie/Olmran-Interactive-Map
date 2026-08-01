@@ -12,11 +12,12 @@ const AMENITY_GROUPS = [
 
 const AMENITY_TYPES = [
   // Boat icons. Optional "layers" restricts a type to specific realm maps --
-  // Kaid Boat is the same icon on all three (Evil/Good/Chaos), each realm's
-  // own "Realm Boat" T is a different color per map, and Evil/Good/Chaos
-  // Boat only show up on the *other two* realms' maps (the boat that takes
-  // you there). See renderAmenityLegend/renderAmenityPalette for the filter.
-  { id: "kaid-boat", label: "Kaid Boat", symbol: "T", color: "#f4d35e", layers: ["olmran-evil", "olmran-good", "olmran-chaos"], group: "tickets" },
+  // Kaid Boat has no "layers" restriction, so it shows on every map (Kaid
+  // included). Each realm's own "Realm Boat" T is a different color per
+  // map, and Evil/Good/Chaos Boat only show up on the *other two* realms'
+  // maps (the boat that takes you there). See renderAmenityLegend/
+  // renderAmenityPalette for the filter.
+  { id: "kaid-boat", label: "Kaid Boat", symbol: "T", color: "#f4d35e", group: "tickets" },
   { id: "evil-realm-boat", label: "Realm Boat", symbol: "T", color: "#d92b2b", layers: ["olmran-evil"], group: "tickets" },
   { id: "good-realm-boat", label: "Realm Boat", symbol: "T", color: "#2b6fd9", layers: ["olmran-good"], group: "tickets" },
   { id: "chaos-realm-boat", label: "Realm Boat", symbol: "T", color: "#2bb84a", layers: ["olmran-chaos"], group: "tickets" },
