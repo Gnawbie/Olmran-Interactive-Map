@@ -903,6 +903,147 @@ html, body {
 
 .hidden { display: none !important; }
 
+/* ---- My Icons (user-placed, localStorage-only) ---- */
+#user-icons-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  margin-top: 10px;
+  margin-bottom: 5px;
+}
+
+#user-icons-header span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #8ea0d0;
+}
+
+.mini-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 3px;
+  background: #e8e8e8;
+  color: #000;
+  cursor: pointer;
+  font-size: 7px;
+  line-height: 1;
+  padding: 0;
+  transition: transform 0.15s ease;
+}
+
+.mini-collapse-btn.collapsed {
+  transform: rotate(-90deg);
+}
+
+#user-icons-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.user-icon-swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #cfd4e0;
+  cursor: pointer;
+  user-select: none;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+
+.user-icon-swatch:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.user-icon-swatch.armed {
+  background: rgba(255,255,255,0.12);
+  outline: 1px solid #8ea0d0;
+}
+
+.user-icon-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  border: 1px solid rgba(0,0,0,0.5);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.control-hint {
+  font-size: 12px;
+  color: #7a8090;
+  font-style: italic;
+}
+
+#user-icons-hint {
+  font-size: 11px;
+  color: #7a8090;
+  font-style: italic;
+  margin-top: 4px;
+  min-height: 14px;
+}
+
+#map.placing-user-icon {
+  cursor: crosshair;
+}
+
+.user-icon-popup textarea.user-icon-note-input {
+  width: 100%;
+  min-height: 50px;
+  margin-top: 6px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0f0f0;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.user-icon-popup-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.user-icon-popup-actions button {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 5px;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.user-icon-save-btn {
+  background: #2b6fd9;
+  color: #fff;
+}
+
+.user-icon-remove-btn {
+  background: #3a2020;
+  color: #e88;
+}
+
 /* Leaflet popup theming */
 .leaflet-popup-content-wrapper {
   background: #1e222b;

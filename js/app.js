@@ -23,6 +23,9 @@
   let recenterTargetName = "";
   const modifiedZoneNames = new Set();
   let devSession = null; // { username, role }
+  let userIconLayerGroup = L.layerGroup();
+  let armedUserIconType = null;
+  const USER_ICONS = loadUserIcons();
 
   const map = L.map("map", {
     crs: L.CRS.Simple,
@@ -86,6 +89,8 @@
     renderAmenityBadges();
     renderTierPaths();
     renderBoundaryAreas();
+    renderUserIcons();
+    renderUserIconPalette();
   }
 
   function markerIcon(type) {
@@ -205,6 +210,142 @@
       });
 
     amenityLayerGroup.addTo(map);
+  }
+
+  // ---- User-placed icons (saved only in this browser's localStorage) ----
+  function loadUserIcons() {
+    try {
+      const raw = localStorage.getItem("userPlacedIcons");
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveUserIcons() {
+    localStorage.setItem("userPlacedIcons", JSON.stringify(USER_ICONS));
+  }
+
+  function userIconTypeDef(id) {
+    return USER_ICON_TYPES.find(t => t.id === id);
+  }
+
+  function userIconMarkerIcon(typeId) {
+    const t = userIconTypeDef(typeId);
+    return L.divIcon({
+      className: "",
+      html: `<span class="user-icon-badge" style="background:${t ? t.color : "#999"}">${typeId}</span>`,
+      iconSize: [36, 20],
+      iconAnchor: [18, 24]
+    });
+  }
+
+  function buildUserIconPopup(icon) {
+    const t = userIconTypeDef(icon.type);
+    const content = document.createElement("div");
+    content.className = "map-popup user-icon-popup";
+
+    const h3 = document.createElement("h3");
+    h3.textContent = t ? `${icon.type} — ${t.label}` : icon.type;
+    content.appendChild(h3);
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "user-icon-note-input";
+    textarea.placeholder = "Add a note...";
+    textarea.value = icon.note || "";
+    content.appendChild(textarea);
+
+    const actions = document.createElement("div");
+    actions.className = "user-icon-popup-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "user-icon-save-btn";
+    saveBtn.textContent = "Save note";
+    saveBtn.addEventListener("click", () => {
+      icon.note = textarea.value;
+      saveUserIcons();
+      flashButton(saveBtn, "Saved!");
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "user-icon-remove-btn";
+    removeBtn.textContent = "Remove icon";
+    removeBtn.addEventListener("click", () => {
+      const idx = USER_ICONS.indexOf(icon);
+      if (idx !== -1) USER_ICONS.splice(idx, 1);
+      saveUserIcons();
+      map.closePopup();
+      renderUserIcons();
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(removeBtn);
+    content.appendChild(actions);
+    return content;
+  }
+
+  function renderUserIcons() {
+    userIconLayerGroup.clearLayers();
+    USER_ICONS
+      .filter(icon => icon.layer === currentLayerId)
+      .forEach(icon => {
+        const marker = L.marker(xyToLatLng(icon.x, icon.y), { icon: userIconMarkerIcon(icon.type) });
+        marker.bindPopup(buildUserIconPopup(icon));
+        userIconLayerGroup.addLayer(marker);
+      });
+    userIconLayerGroup.addTo(map);
+  }
+
+  function armUserIconType(typeId) {
+    armedUserIconType = typeId;
+    document.getElementById("map").classList.toggle("placing-user-icon", !!armedUserIconType);
+    renderUserIconPalette();
+  }
+
+  function renderUserIconPalette() {
+    const wrap = document.getElementById("user-icons-palette");
+    const hint = document.getElementById("user-icons-hint");
+    if (!wrap || !hint) return;
+    wrap.innerHTML = "";
+    const types = USER_ICON_TYPES.filter(t => t.layer === currentLayerId);
+
+    if (types.length === 0) {
+      armedUserIconType = null;
+      document.getElementById("map").classList.remove("placing-user-icon");
+      wrap.innerHTML = `<div class="control-hint">No custom icons for this map.</div>`;
+      hint.textContent = "";
+      return;
+    }
+
+    types.forEach(t => {
+      const chip = document.createElement("div");
+      chip.className = "user-icon-swatch" + (armedUserIconType === t.id ? " armed" : "");
+      chip.title = `Click, then click the map to place ${t.label}`;
+      const badge = document.createElement("span");
+      badge.className = "user-icon-badge";
+      badge.style.background = t.color;
+      badge.textContent = t.id;
+      const label = document.createElement("span");
+      label.textContent = t.label;
+      chip.appendChild(badge);
+      chip.appendChild(label);
+      chip.addEventListener("click", () => armUserIconType(armedUserIconType === t.id ? null : t.id));
+      wrap.appendChild(chip);
+    });
+
+    hint.textContent = armedUserIconType
+      ? `Click the map to place ${armedUserIconType}. Click the swatch again to cancel.`
+      : "Click an icon, then click the map to place it.";
+  }
+
+  function toggleUserIconsSection(forceState) {
+    const body = document.getElementById("user-icons-body");
+    const btn = document.getElementById("user-icons-collapse-btn");
+    const collapsed = forceState !== undefined ? forceState : !body.classList.contains("hidden");
+    body.classList.toggle("hidden", collapsed);
+    btn.classList.toggle("collapsed", collapsed);
+    localStorage.setItem("userIconsSectionCollapsed", collapsed ? "1" : "0");
   }
 
   // ---- Tier path overlays (Green/Red/Purple; White is left uncolored) ----
@@ -1172,6 +1313,17 @@
   }
 
   map.on("click", (e) => {
+    if (armedUserIconType) {
+      const raw = latLngToXY(e.latlng);
+      const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
+      USER_ICONS.push({ type: armedUserIconType, layer: currentLayerId, x, y, note: "" });
+      saveUserIcons();
+      renderUserIcons();
+      flashAt(x, y);
+      armUserIconType(null);
+      return;
+    }
+
     if (areaDrawActive) {
       const raw = latLngToXY(e.latlng);
       const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
@@ -1417,6 +1569,11 @@
   toggleItemsCollapse(localStorage.getItem("itemsPanelCollapsed") === "1");
   document.getElementById("control-box-collapse-btn").addEventListener("click", () => toggleControlBoxCollapse());
   toggleControlBoxCollapse(localStorage.getItem("controlBoxCollapsed") === "1");
+  document.getElementById("user-icons-header").addEventListener("click", () => toggleUserIconsSection());
+  toggleUserIconsSection(localStorage.getItem("userIconsSectionCollapsed") !== "0");
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && armedUserIconType) armUserIconType(null);
+  });
   loadDevSession();
   updateAuthUI();
   if (!applyViewFromUrl()) {

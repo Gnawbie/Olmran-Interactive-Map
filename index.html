@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Land of Kaid — Interactive Map</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/style.css?v=27">
+<link rel="stylesheet" href="css/style.css?v=28">
 </head>
 <body>
 
@@ -45,6 +45,15 @@
 
     <div class="control-label" style="margin-top:10px;">Amenity legend</div>
     <div id="amenity-legend"></div>
+
+    <div id="user-icons-header">
+      <button id="user-icons-collapse-btn" class="mini-collapse-btn" title="Expand/collapse">▼</button>
+      <span>My Icons (saved on this device)</span>
+    </div>
+    <div id="user-icons-body" class="hidden">
+      <div id="user-icons-palette"></div>
+      <div id="user-icons-hint"></div>
+    </div>
   </div>
 </div>
 
@@ -160,16 +169,17 @@
   always get the latest version instead of a stale cached copy.
 -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/data/layers.js?v=27"></script>
-<script src="js/data/zones.js?v=27"></script>
-<script src="js/data/markers.js?v=27"></script>
-<script src="js/data/amenities.js?v=27"></script>
-<script src="js/data/zone-amenities.js?v=27"></script>
-<script src="js/data/amenity-points.js?v=27"></script>
-<script src="js/data/tier-paths.js?v=27"></script>
-<script src="js/data/boundary-areas.js?v=27"></script>
-<script src="js/data/zone-items.js?v=27"></script>
-<script src="js/data/dev-accounts.js?v=27"></script>
-<script src="js/app.js?v=27"></script>
+<script src="js/data/layers.js?v=28"></script>
+<script src="js/data/zones.js?v=28"></script>
+<script src="js/data/markers.js?v=28"></script>
+<script src="js/data/amenities.js?v=28"></script>
+<script src="js/data/zone-amenities.js?v=28"></script>
+<script src="js/data/amenity-points.js?v=28"></script>
+<script src="js/data/user-icon-types.js?v=28"></script>
+<script src="js/data/tier-paths.js?v=28"></script>
+<script src="js/data/boundary-areas.js?v=28"></script>
+<script src="js/data/zone-items.js?v=28"></script>
+<script src="js/data/dev-accounts.js?v=28"></script>
+<script src="js/app.js?v=28"></script>
 </body>
 </html>
