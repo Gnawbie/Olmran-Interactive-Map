@@ -7,5 +7,26 @@ const MAP_LAYERS = [
     image: "maps/Land_of_Kaid_Fix.png",
     width: 4766,
     height: 6632
+  },
+  {
+    id: "olmran-evil",
+    name: "Evil",
+    image: "maps/Olmran_Evil_v1.1.png",
+    width: 5270,
+    height: 4068
+  },
+  {
+    id: "olmran-good",
+    name: "Good",
+    image: "maps/Olmran_Good_v1.1.png",
+    width: 5251,
+    height: 3796
+  },
+  {
+    id: "olmran-chaos",
+    name: "Chaos",
+    image: "maps/Olmran_Chaos_v1.1.png",
+    width: 6983,
+    height: 5326
   }
 ];
