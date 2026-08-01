@@ -10,8 +10,15 @@ const AMENITY_TYPES = [
   { id: "evil", label: "Evil Starting Area", symbol: "E", color: "#d92b2b" },
   { id: "good", label: "Good Starting Area", symbol: "G", color: "#2b6fd9" },
   { id: "chaos", label: "Chaos Starting Area", symbol: "C", color: "#2bb84a" },
-  { id: "zone-white", label: "White Zone", symbol: "●", color: "#f0f0f0" },
-  { id: "zone-green", label: "Green Zone", symbol: "●", color: "#4ade56" },
-  { id: "zone-red", label: "Red Zone", symbol: "●", color: "#d92b2b" },
-  { id: "zone-purple", label: "Purple Zone", symbol: "●", color: "#9b59d6" }
+  // The zone-* tier types are intentionally excluded from the legend, the
+  // map badges, and the drag-tag palette (see renderAmenityLegend,
+  // renderAmenityBadges, renderAmenityPalette) — the boundary-area tool now
+  // paints actual rooms for these tiers, so a dot badge duplicating that on
+  // top would just be clutter. They stay defined here (hidden: true) purely
+  // so ZONE_AMENITIES tags still resolve to a color for the Zone Tier
+  // Reference panel's swatches.
+  { id: "zone-white", label: "White Zone", symbol: "●", color: "#f0f0f0", hidden: true },
+  { id: "zone-green", label: "Green Zone", symbol: "●", color: "#4ade56", hidden: true },
+  { id: "zone-red", label: "Red Zone", symbol: "●", color: "#d92b2b", hidden: true },
+  { id: "zone-purple", label: "Purple Zone", symbol: "●", color: "#9b59d6", hidden: true }
 ];

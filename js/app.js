@@ -172,7 +172,7 @@
     amenityLayerGroup.clearLayers();
     Object.entries(ZONE_AMENITIES).forEach(([zoneName, allAmenityIds]) => {
       const zone = findZoneByName(zoneName);
-      const amenityIds = allAmenityIds.filter(id => !hiddenAmenityTypes.has(id));
+      const amenityIds = allAmenityIds.filter(id => !hiddenAmenityTypes.has(id) && !(amenityDef(id) || {}).hidden);
       if (!zone || zone.layer !== currentLayerId || amenityIds.length === 0) return;
       const marker = L.marker(xyToLatLng(zone.x, zone.y), { icon: amenityBadgeIcon(amenityIds) });
       const labels = amenityIds.map(id => amenityDef(id)).filter(Boolean).map(def => def.label).join(", ");
@@ -181,7 +181,7 @@
     });
 
     AMENITY_POINTS
-      .filter(p => p.layer === currentLayerId && !hiddenAmenityTypes.has(p.type))
+      .filter(p => p.layer === currentLayerId && !hiddenAmenityTypes.has(p.type) && !(amenityDef(p.type) || {}).hidden)
       .forEach(p => {
         const def = amenityDef(p.type);
         const marker = L.marker(xyToLatLng(p.x, p.y), { icon: amenityPointIcon(p.type) });
@@ -457,7 +457,7 @@
   function renderAmenityPalette() {
     const wrap = document.getElementById("dev-amenity-palette");
     wrap.innerHTML = "";
-    AMENITY_TYPES.forEach(def => {
+    AMENITY_TYPES.filter(def => !def.hidden).forEach(def => {
       const chip = document.createElement("div");
       chip.className = "amenity-drag-chip";
       chip.draggable = true;
@@ -486,7 +486,7 @@
   function renderAmenityLegend() {
     const wrap = document.getElementById("amenity-legend");
     wrap.innerHTML = "";
-    AMENITY_TYPES.forEach(def => {
+    AMENITY_TYPES.filter(def => !def.hidden).forEach(def => {
       const row = document.createElement("div");
       const hidden = hiddenAmenityTypes.has(def.id);
       row.className = "amenity-legend-row" + (hidden ? " legend-hidden" : "");
