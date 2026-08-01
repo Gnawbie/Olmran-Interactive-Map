@@ -825,6 +825,7 @@
     }
 
     handle.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button, input, select, textarea, a")) return;
       dragging = true;
       const rect = panel.getBoundingClientRect();
       offsetX = e.clientX - rect.left;
