@@ -67,6 +67,9 @@ html, body {
 }
 
 #control-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 12px;
   font-weight: 700;
   font-size: 13px;
@@ -78,8 +81,36 @@ html, body {
   touch-action: none;
 }
 
+#control-box-header span { flex: 1; }
+
+#control-box-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: #e8e8e8;
+  color: #000;
+  cursor: pointer;
+  font-size: 9px;
+  line-height: 1;
+  padding: 0;
+  transition: transform 0.15s ease;
+}
+
+#control-box-collapse-btn.collapsed {
+  transform: rotate(-90deg);
+}
+
 #control-box-body {
   padding: 10px 12px;
+}
+
+#control-box.collapsed #control-box-body {
+  display: none;
 }
 
 #control-box-empty {

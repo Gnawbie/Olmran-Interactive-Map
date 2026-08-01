@@ -753,6 +753,15 @@
     localStorage.setItem("itemsPanelCollapsed", collapsed ? "1" : "0");
   }
 
+  function toggleControlBoxCollapse(forceState) {
+    const panel = document.getElementById("control-box");
+    const btn = document.getElementById("control-box-collapse-btn");
+    const collapsed = forceState !== undefined ? forceState : !panel.classList.contains("collapsed");
+    panel.classList.toggle("collapsed", collapsed);
+    btn.classList.toggle("collapsed", collapsed);
+    localStorage.setItem("controlBoxCollapsed", collapsed ? "1" : "0");
+  }
+
   // ---- Shareable view links ----
   // A link like ?layer=land-of-kaid&x=1234&y=567&z=1 pans/zooms straight to that spot on load.
   function buildViewLink(layer, x, y, zoom) {
@@ -1404,6 +1413,8 @@
   makeDraggable(document.getElementById("items-panel"), document.getElementById("items-header"), "itemsPanelPosition");
   document.getElementById("items-collapse-btn").addEventListener("click", () => toggleItemsCollapse());
   toggleItemsCollapse(localStorage.getItem("itemsPanelCollapsed") === "1");
+  document.getElementById("control-box-collapse-btn").addEventListener("click", () => toggleControlBoxCollapse());
+  toggleControlBoxCollapse(localStorage.getItem("controlBoxCollapsed") === "1");
   loadDevSession();
   updateAuthUI();
   if (!applyViewFromUrl()) {
