@@ -880,8 +880,13 @@
     return div.innerHTML;
   }
 
+  // Text labels are markers (for drag/click-to-edit), but their fontSize is
+  // defined "as of zoom 0" and rescaled by 2^zoom on every zoom change --
+  // this makes them grow/shrink WITH the map image instead of staying a
+  // fixed on-screen size like every other marker/badge on the map.
   function textLabelIcon(label) {
-    const fontSize = label.fontSize || 24;
+    const baseFontSize = label.fontSize || 24;
+    const fontSize = baseFontSize * Math.pow(2, map.getZoom());
     return L.divIcon({
       className: "",
       html: `<div class="map-text-label" style="font-size:${fontSize}px">${escapeHtml(label.text)}</div>`,
@@ -956,6 +961,7 @@
           icon: textLabelIcon(label),
           draggable: !!devSession
         });
+        marker.__textLabel = label;
         marker.on("dragend", () => {
           const raw = latLngToXY(marker.getLatLng());
           const { x, y } = clampToLayerBounds(label.layer, raw.x, raw.y);
@@ -966,6 +972,12 @@
         textLabelLayerGroup.addLayer(marker);
       });
     textLabelLayerGroup.addTo(map);
+  }
+
+  function rescaleTextLabels() {
+    textLabelLayerGroup.eachLayer(marker => {
+      if (marker.__textLabel) marker.setIcon(textLabelIcon(marker.__textLabel));
+    });
   }
 
   function updateTextStatus() {
@@ -1739,6 +1751,8 @@
     });
     return `const ZONES = [\n${lines.join(",\n")}\n];\n`;
   }
+
+  map.on("zoom", rescaleTextLabels);
 
   map.on("click", (e) => {
     if (armedUserIconType) {
