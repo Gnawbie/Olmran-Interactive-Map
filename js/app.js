@@ -11,6 +11,12 @@
   let tracingActive = false;
   let currentTracePoints = [];
   const TIER_PATH_COLORS = { green: "#4ade56", red: "#d92b2b", purple: "#9b59d6" };
+  let boundaryBoxLayerGroup = L.layerGroup();
+  let boxPreviewLayer = null;
+  let boxDrawActive = false;
+  let boxCorner1 = null;
+  let boxCorner2 = null;
+  const layerImageCache = {};
   let devPickerActive = false;
   const devPoints = [];
   const activeTypeFilters = new Set();
@@ -78,6 +84,7 @@
     renderMarkers();
     renderAmenityBadges();
     renderTierPaths();
+    renderBoundaryBoxes();
   }
 
   function markerIcon(type) {
@@ -230,7 +237,7 @@
   }
 
   function updateMapCursor() {
-    map.getContainer().style.cursor = (tracingActive || devPickerActive) ? "crosshair" : "";
+    map.getContainer().style.cursor = (tracingActive || devPickerActive || boxDrawActive) ? "crosshair" : "";
   }
 
   function updateTracePreview() {
@@ -282,6 +289,133 @@
       return `  { tier: ${JSON.stringify(p.tier)}, layer: ${JSON.stringify(p.layer)}, points: [${pts}] }`;
     });
     return `const TIER_PATHS = [\n${lines.join(",\n")}\n];\n`;
+  }
+
+  // ---- Boundary boxes: recolor every white pixel inside a hand-drawn box ----
+  function getLayerImage(layerId) {
+    if (layerImageCache[layerId]) return Promise.resolve(layerImageCache[layerId]);
+    const layer = layersById[layerId];
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => { layerImageCache[layerId] = img; resolve(img); };
+      img.onerror = reject;
+      img.src = layer.image;
+    });
+  }
+
+  function hexToRgbObj(hex) {
+    const v = parseInt(hex.slice(1), 16);
+    return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+  }
+
+  function buildRecoloredOverlayDataUrl(img, box) {
+    const w = Math.round(box.x2 - box.x1);
+    const h = Math.round(box.y2 - box.y1);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, box.x1, box.y1, w, h, 0, 0, w, h);
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    const rgb = hexToRgbObj(TIER_PATH_COLORS[box.tier]);
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 235 && data[i + 1] > 235 && data[i + 2] > 235) {
+        data[i] = rgb.r;
+        data[i + 1] = rgb.g;
+        data[i + 2] = rgb.b;
+        data[i + 3] = 220;
+      } else {
+        data[i + 3] = 0;
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return canvas.toDataURL("image/png");
+  }
+
+  async function renderBoundaryBoxes() {
+    const boxes = BOUNDARY_BOXES.filter(b => b.layer === currentLayerId);
+    boundaryBoxLayerGroup.clearLayers();
+    for (const box of boxes) {
+      try {
+        const img = await getLayerImage(box.layer);
+        const dataUrl = buildRecoloredOverlayDataUrl(img, box);
+        const bounds = [xyToLatLng(box.x1, box.y1), xyToLatLng(box.x2, box.y2)];
+        const overlay = L.imageOverlay(dataUrl, bounds, { interactive: true });
+        const content = document.createElement("div");
+        content.className = "map-popup";
+        const label = box.tier.charAt(0).toUpperCase() + box.tier.slice(1);
+        content.innerHTML = `<h3>${label} Box</h3><p>${Math.round(box.x2 - box.x1)}×${Math.round(box.y2 - box.y1)}px</p>`;
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "Remove";
+        removeBtn.className = "amenity-point-remove";
+        removeBtn.addEventListener("click", () => {
+          const idx = BOUNDARY_BOXES.indexOf(box);
+          if (idx !== -1) BOUNDARY_BOXES.splice(idx, 1);
+          renderBoundaryBoxes();
+          updateBoxStatus();
+        });
+        content.appendChild(removeBtn);
+        overlay.bindPopup(content);
+        boundaryBoxLayerGroup.addLayer(overlay);
+      } catch (e) {
+        console.error("Failed to render boundary box", e);
+      }
+    }
+    boundaryBoxLayerGroup.addTo(map);
+  }
+
+  function clearBoxPreview() {
+    if (boxPreviewLayer) {
+      map.removeLayer(boxPreviewLayer);
+      boxPreviewLayer = null;
+    }
+  }
+
+  function updateBoxPreview() {
+    clearBoxPreview();
+    if (!boxCorner1) return;
+    const group = L.layerGroup();
+    L.circleMarker(xyToLatLng(boxCorner1[0], boxCorner1[1]), { radius: 5, color: "#ffd76c", fillColor: "#ffd76c", fillOpacity: 1 }).addTo(group);
+    if (boxCorner2) {
+      const bounds = [xyToLatLng(boxCorner1[0], boxCorner1[1]), xyToLatLng(boxCorner2[0], boxCorner2[1])];
+      L.rectangle(bounds, { color: "#ffd76c", weight: 3, dashArray: "6,6", fillOpacity: 0.1 }).addTo(group);
+    }
+    boxPreviewLayer = group;
+    boxPreviewLayer.addTo(map);
+  }
+
+  function updateBoxStatus() {
+    const el = document.getElementById("box-status");
+    if (!boxDrawActive) {
+      el.textContent = `${BOUNDARY_BOXES.length} box(es) saved`;
+      return;
+    }
+    if (!boxCorner1) el.textContent = "Click the first corner";
+    else if (!boxCorner2) el.textContent = "Click the opposite corner";
+    else el.textContent = "Pick a tier to save, or Cancel";
+  }
+
+  function toggleBoxDraw(forceState) {
+    const next = forceState !== undefined ? forceState : !boxDrawActive;
+    if (next && !devSession) return;
+    boxDrawActive = next;
+    document.getElementById("box-toggle-btn").textContent = boxDrawActive ? "Stop Box" : "Start Box";
+    document.getElementById("box-toggle-btn").classList.toggle("active", boxDrawActive);
+    if (!boxDrawActive) {
+      boxCorner1 = null;
+      boxCorner2 = null;
+      clearBoxPreview();
+    }
+    updateMapCursor();
+    updateBoxStatus();
+  }
+
+  function formatBoundaryBoxesFile(boxes) {
+    const lines = boxes.map(b =>
+      `  { tier: ${JSON.stringify(b.tier)}, layer: ${JSON.stringify(b.layer)}, x1: ${Math.round(b.x1)}, y1: ${Math.round(b.y1)}, x2: ${Math.round(b.x2)}, y2: ${Math.round(b.y2)} }`
+    );
+    return `const BOUNDARY_BOXES = [\n${lines.join(",\n")}\n];\n`;
   }
 
   // ---- Dev: drag-and-drop amenity tagging ----
@@ -657,6 +791,7 @@
     if (!loggedIn) {
       toggleDevPicker(false);
       toggleTracing(false);
+      toggleBoxDraw(false);
     }
   }
 
@@ -754,6 +889,21 @@
   }
 
   map.on("click", (e) => {
+    if (boxDrawActive) {
+      const raw = latLngToXY(e.latlng);
+      const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
+      if (!boxCorner1) {
+        boxCorner1 = [x, y];
+      } else if (!boxCorner2) {
+        boxCorner2 = [x, y];
+      } else {
+        return;
+      }
+      updateBoxPreview();
+      updateBoxStatus();
+      return;
+    }
+
     if (tracingActive) {
       const raw = latLngToXY(e.latlng);
       const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
@@ -860,6 +1010,32 @@
   document.getElementById("tier-export-btn").addEventListener("click", (e) => {
     copyToClipboard(formatTierPathsFile(TIER_PATHS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
   });
+  document.getElementById("box-toggle-btn").addEventListener("click", () => toggleBoxDraw());
+  document.getElementById("box-cancel-btn").addEventListener("click", () => {
+    boxCorner1 = null;
+    boxCorner2 = null;
+    clearBoxPreview();
+    updateBoxStatus();
+  });
+  document.querySelectorAll(".box-tag-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (!boxCorner1 || !boxCorner2) return;
+      const x1 = Math.min(boxCorner1[0], boxCorner2[0]);
+      const y1 = Math.min(boxCorner1[1], boxCorner2[1]);
+      const x2 = Math.max(boxCorner1[0], boxCorner2[0]);
+      const y2 = Math.max(boxCorner1[1], boxCorner2[1]);
+      if (x2 - x1 < 4 || y2 - y1 < 4) return;
+      BOUNDARY_BOXES.push({ tier: btn.dataset.tier, layer: currentLayerId, x1, y1, x2, y2 });
+      boxCorner1 = null;
+      boxCorner2 = null;
+      clearBoxPreview();
+      updateBoxStatus();
+      renderBoundaryBoxes();
+    });
+  });
+  document.getElementById("box-export-btn").addEventListener("click", (e) => {
+    copyToClipboard(formatBoundaryBoxesFile(BOUNDARY_BOXES), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
+  });
   document.getElementById("search-box").addEventListener("input", (e) => runSearch(e.target.value));
   document.getElementById("search-box").addEventListener("focus", (e) => runSearch(e.target.value));
   document.addEventListener("click", (e) => {
@@ -954,6 +1130,7 @@
   renderAmenityPalette();
   updateTagStatus();
   updateTraceStatus();
+  updateBoxStatus();
   renderDevPoints();
   makeDraggable(document.getElementById("control-box"), document.getElementById("control-box-header"), "controlBoxPosition");
   loadDevSession();
