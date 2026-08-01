@@ -1,6 +1,6 @@
-# Land of Kaid — Interactive Map
+# Land of Olmran — Interactive Map
 
-A pannable, zoomable interactive map viewer for the Land of Kaid game world.
+A pannable, zoomable interactive map viewer for the Land of Olmran game world.
 
 ## Features
 
