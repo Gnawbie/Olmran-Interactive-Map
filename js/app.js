@@ -6,6 +6,11 @@
   let imageOverlay = null;
   let markerLayerGroup = L.layerGroup();
   let amenityLayerGroup = L.layerGroup();
+  let tierPathLayerGroup = L.layerGroup();
+  let tracePreviewLayer = null;
+  let tracingActive = false;
+  let currentTracePoints = [];
+  const TIER_PATH_COLORS = { green: "#4ade56", red: "#d92b2b", purple: "#9b59d6" };
   let devPickerActive = false;
   const devPoints = [];
   const activeTypeFilters = new Set();
@@ -72,6 +77,7 @@
 
     renderMarkers();
     renderAmenityBadges();
+    renderTierPaths();
   }
 
   function markerIcon(type) {
@@ -191,6 +197,91 @@
       });
 
     amenityLayerGroup.addTo(map);
+  }
+
+  // ---- Tier path overlays (Green/Red/Purple; White is left uncolored) ----
+  function renderTierPaths() {
+    tierPathLayerGroup.clearLayers();
+    TIER_PATHS
+      .filter(p => p.layer === currentLayerId)
+      .forEach(p => {
+        const color = TIER_PATH_COLORS[p.tier];
+        if (!color || p.points.length < 2) return;
+        const latlngs = p.points.map(([x, y]) => xyToLatLng(x, y));
+        const line = L.polyline(latlngs, { color, weight: 5, opacity: 0.65 });
+        const content = document.createElement("div");
+        content.className = "map-popup";
+        const label = p.tier.charAt(0).toUpperCase() + p.tier.slice(1);
+        content.innerHTML = `<h3>${label} Tier Path</h3><p>${p.points.length} points</p>`;
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "Remove";
+        removeBtn.className = "amenity-point-remove";
+        removeBtn.addEventListener("click", () => {
+          const idx = TIER_PATHS.indexOf(p);
+          if (idx !== -1) TIER_PATHS.splice(idx, 1);
+          renderTierPaths();
+          updateTraceStatus();
+        });
+        content.appendChild(removeBtn);
+        line.bindPopup(content);
+        tierPathLayerGroup.addLayer(line);
+      });
+    tierPathLayerGroup.addTo(map);
+  }
+
+  function updateMapCursor() {
+    map.getContainer().style.cursor = (tracingActive || devPickerActive) ? "crosshair" : "";
+  }
+
+  function updateTracePreview() {
+    if (tracePreviewLayer) {
+      map.removeLayer(tracePreviewLayer);
+      tracePreviewLayer = null;
+    }
+    if (currentTracePoints.length === 0) return;
+    const latlngs = currentTracePoints.map(([x, y]) => xyToLatLng(x, y));
+    const group = L.layerGroup();
+    if (latlngs.length > 1) {
+      L.polyline(latlngs, { color: "#ffd76c", weight: 4, dashArray: "6,6", opacity: 0.9 }).addTo(group);
+    }
+    latlngs.forEach(ll => {
+      L.circleMarker(ll, { radius: 4, color: "#ffd76c", fillColor: "#ffd76c", fillOpacity: 1 }).addTo(group);
+    });
+    tracePreviewLayer = group;
+    tracePreviewLayer.addTo(map);
+  }
+
+  function updateTraceStatus() {
+    const el = document.getElementById("trace-status");
+    if (!tracingActive) {
+      el.textContent = `${TIER_PATHS.length} segment(s) saved`;
+      return;
+    }
+    el.textContent = currentTracePoints.length < 2
+      ? `${currentTracePoints.length} point(s) — need at least 2 to save`
+      : `${currentTracePoints.length} point(s) — pick a tier to save, or Undo/Cancel`;
+  }
+
+  function toggleTracing(forceState) {
+    const next = forceState !== undefined ? forceState : !tracingActive;
+    if (next && !devSession) return;
+    tracingActive = next;
+    document.getElementById("trace-toggle-btn").textContent = tracingActive ? "Stop Tracing" : "Start Tracing";
+    document.getElementById("trace-toggle-btn").classList.toggle("active", tracingActive);
+    if (!tracingActive) {
+      currentTracePoints = [];
+      updateTracePreview();
+    }
+    updateMapCursor();
+    updateTraceStatus();
+  }
+
+  function formatTierPathsFile(paths) {
+    const lines = paths.map(p => {
+      const pts = p.points.map(([x, y]) => `[${Math.round(x)}, ${Math.round(y)}]`).join(", ");
+      return `  { tier: ${JSON.stringify(p.tier)}, layer: ${JSON.stringify(p.layer)}, points: [${pts}] }`;
+    });
+    return `const TIER_PATHS = [\n${lines.join(",\n")}\n];\n`;
   }
 
   // ---- Dev: drag-and-drop amenity tagging ----
@@ -500,7 +591,7 @@
     devPickerActive = next;
     document.getElementById("dev-toggle").classList.toggle("active", devPickerActive);
     document.getElementById("dev-panel").classList.toggle("hidden", !devPickerActive);
-    map.getContainer().style.cursor = devPickerActive ? "crosshair" : "";
+    updateMapCursor();
   }
 
   // ---- Dev login (PBKDF2-hashed, client-side only — see dev-accounts.js) ----
@@ -563,7 +654,10 @@
     document.getElementById("dev-toggle").classList.toggle("hidden", !loggedIn);
     document.getElementById("dev-manage-btn").classList.toggle("hidden", !(loggedIn && devSession.role === "main"));
     document.getElementById("dev-session-user").textContent = loggedIn ? devSession.username : "";
-    if (!loggedIn) toggleDevPicker(false);
+    if (!loggedIn) {
+      toggleDevPicker(false);
+      toggleTracing(false);
+    }
   }
 
   function toggleLoginOverlay(show) {
@@ -660,8 +754,18 @@
   }
 
   map.on("click", (e) => {
+    if (tracingActive) {
+      const raw = latLngToXY(e.latlng);
+      const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
+      currentTracePoints.push([x, y]);
+      updateTracePreview();
+      updateTraceStatus();
+      return;
+    }
+
     if (!devPickerActive) return;
-    const { x, y } = latLngToXY(e.latlng);
+    const rawPoint = latLngToXY(e.latlng);
+    const { x, y } = clampToLayerBounds(currentLayerId, rawPoint.x, rawPoint.y);
 
     if (recenterTargetName) {
       const zone = findZoneByName(recenterTargetName);
@@ -731,6 +835,30 @@
   });
   document.getElementById("dev-export-amenity-points").addEventListener("click", (e) => {
     copyToClipboard(formatAmenityPointsFile(AMENITY_POINTS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
+  });
+  document.getElementById("trace-toggle-btn").addEventListener("click", () => toggleTracing());
+  document.getElementById("trace-undo-btn").addEventListener("click", () => {
+    currentTracePoints.pop();
+    updateTracePreview();
+    updateTraceStatus();
+  });
+  document.getElementById("trace-cancel-btn").addEventListener("click", () => {
+    currentTracePoints = [];
+    updateTracePreview();
+    updateTraceStatus();
+  });
+  document.querySelectorAll(".tier-tag-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (currentTracePoints.length < 2) return;
+      TIER_PATHS.push({ tier: btn.dataset.tier, layer: currentLayerId, points: currentTracePoints.slice() });
+      currentTracePoints = [];
+      updateTracePreview();
+      updateTraceStatus();
+      renderTierPaths();
+    });
+  });
+  document.getElementById("tier-export-btn").addEventListener("click", (e) => {
+    copyToClipboard(formatTierPathsFile(TIER_PATHS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
   });
   document.getElementById("search-box").addEventListener("input", (e) => runSearch(e.target.value));
   document.getElementById("search-box").addEventListener("focus", (e) => runSearch(e.target.value));
@@ -825,6 +953,7 @@
   renderAmenityLegend();
   renderAmenityPalette();
   updateTagStatus();
+  updateTraceStatus();
   renderDevPoints();
   makeDraggable(document.getElementById("control-box"), document.getElementById("control-box-header"), "controlBoxPosition");
   loadDevSession();
