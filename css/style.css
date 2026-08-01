@@ -1066,6 +1066,12 @@ html, body {
 }
 .map-popup p { margin: 4px 0 0; font-size: 13px; color: #cfd4e0; }
 
+.amenity-point-drag-hint {
+  font-size: 11px !important;
+  color: #7a8090 !important;
+  font-style: italic;
+}
+
 .amenity-point-remove {
   margin-top: 8px;
   padding: 4px 10px;

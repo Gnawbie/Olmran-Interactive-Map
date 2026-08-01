@@ -193,10 +193,27 @@
       .filter(p => p.layer === currentLayerId && !hiddenAmenityTypes.has(p.type) && !(amenityDef(p.type) || {}).hidden)
       .forEach(p => {
         const def = amenityDef(p.type);
-        const marker = L.marker(xyToLatLng(p.x, p.y), { icon: amenityPointIcon(p.type) });
+        const marker = L.marker(xyToLatLng(p.x, p.y), {
+          icon: amenityPointIcon(p.type),
+          draggable: !!devSession
+        });
+
         const content = document.createElement("div");
         content.className = "map-popup";
-        content.innerHTML = `<h3>${def ? def.label : p.type}</h3><p>x:${p.x} y:${p.y}</p>`;
+        const h3 = document.createElement("h3");
+        h3.textContent = def ? def.label : p.type;
+        const coordText = document.createElement("p");
+        coordText.textContent = `x:${p.x} y:${p.y}`;
+        content.appendChild(h3);
+        content.appendChild(coordText);
+
+        if (devSession) {
+          const hint = document.createElement("p");
+          hint.className = "amenity-point-drag-hint";
+          hint.textContent = "Drag to reposition.";
+          content.appendChild(hint);
+        }
+
         const removeBtn = document.createElement("button");
         removeBtn.textContent = "Remove";
         removeBtn.className = "amenity-point-remove";
@@ -207,6 +224,16 @@
           updateTagStatus();
         });
         content.appendChild(removeBtn);
+
+        marker.on("dragend", () => {
+          const raw = latLngToXY(marker.getLatLng());
+          const { x, y } = clampToLayerBounds(p.layer, raw.x, raw.y);
+          p.x = x;
+          p.y = y;
+          coordText.textContent = `x:${p.x} y:${p.y}`;
+          updateTagStatus();
+        });
+
         marker.bindPopup(content);
         amenityLayerGroup.addLayer(marker);
       });
@@ -1242,6 +1269,7 @@
       toggleTracing(false);
       toggleAreaDraw(false);
     }
+    renderAmenityBadges();
   }
 
   function toggleLoginOverlay(show) {
