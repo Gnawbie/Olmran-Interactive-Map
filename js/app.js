@@ -91,6 +91,8 @@
     renderBoundaryAreas();
     renderUserIcons();
     renderUserIconPalette();
+    renderZoneSelect();
+    renderDevZoneTargetSelect();
   }
 
   function markerIcon(type) {
@@ -741,19 +743,16 @@
 
   function renderZoneSelect() {
     const select = document.getElementById("zone-select");
-    const sorted = [...ZONES].sort((a, b) => a.name.localeCompare(b.name));
-    sorted.forEach(zone => {
-      const opt = document.createElement("option");
-      opt.value = zone.name;
-      opt.textContent = zone.name;
-      select.appendChild(opt);
-    });
-    select.addEventListener("change", () => {
-      if (!select.value) return;
-      const zone = sorted.find(z => z.name === select.value);
-      if (zone) goTo(zone);
-      select.value = "";
-    });
+    select.innerHTML = '<option value="">Select a zone…</option>';
+    ZONES
+      .filter(z => z.layer === currentLayerId)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(zone => {
+        const opt = document.createElement("option");
+        opt.value = zone.name;
+        opt.textContent = zone.name;
+        select.appendChild(opt);
+      });
   }
 
   function renderLayerSelect() {
@@ -1305,7 +1304,9 @@
   // ---- Dev: re-center a zone by clicking the map ----
   function renderDevZoneTargetSelect() {
     const select = document.getElementById("dev-zone-target");
-    [...ZONES]
+    select.innerHTML = '<option value="">— none, just log points —</option>';
+    ZONES
+      .filter(z => z.layer === currentLayerId)
       .sort((a, b) => a.name.localeCompare(b.name))
       .forEach(zone => {
         const opt = document.createElement("option");
@@ -1313,6 +1314,8 @@
         opt.textContent = zone.name;
         select.appendChild(opt);
       });
+    recenterTargetName = "";
+    updateRecenterStatus();
   }
 
   function findZoneByName(name) {
@@ -1578,8 +1581,12 @@
     copyToClipboard(formatDevAccountsFile(DEV_ACCOUNTS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
   });
 
-  renderZoneSelect();
-  renderDevZoneTargetSelect();
+  document.getElementById("zone-select").addEventListener("change", (e) => {
+    if (!e.target.value) return;
+    const zone = findZoneByName(e.target.value);
+    if (zone) goTo(zone);
+    e.target.value = "";
+  });
   renderLayerSelect();
   renderFilterChips();
   renderAmenityLegend();
