@@ -12,8 +12,8 @@ const AMENITY_POINTS = [
   { type: "shop", layer: "olmran-evil", x: 1929, y: 1411 },
   { type: "hospital", layer: "olmran-evil", x: 994, y: 689 },
   { type: "shop", layer: "olmran-evil", x: 1030, y: 687 },
-  { type: "hospital", layer: "olmran-evil", x: 608, y: 1028 },
-  { type: "shop", layer: "olmran-evil", x: 841, y: 1024 },
+  { type: "hospital", layer: "olmran-evil", x: 604, y: 1031 },
+  { type: "shop", layer: "olmran-evil", x: 844, y: 1030 },
   { type: "hospital", layer: "olmran-evil", x: 533, y: 2176 },
   { type: "shop", layer: "olmran-evil", x: 1440, y: 2227 },
   { type: "hospital", layer: "olmran-evil", x: 1674, y: 2893 },
@@ -31,5 +31,13 @@ const AMENITY_POINTS = [
   { type: "chaos-boat", layer: "olmran-evil", x: 2806, y: 2999 },
   { type: "kaid-boat", layer: "olmran-evil", x: 2979, y: 3544 },
   { type: "evil-realm-boat", layer: "olmran-evil", x: 3016, y: 3544 },
-  { type: "airship", layer: "olmran-evil", x: 2837, y: 3155 }
+  { type: "airship", layer: "olmran-evil", x: 2837, y: 3155 },
+  { type: "shop", layer: "olmran-evil", x: 1290, y: 863 },
+  { type: "hospital", layer: "olmran-evil", x: 1277, y: 864 },
+  { type: "repair", layer: "olmran-evil", x: 1301, y: 864 },
+  { type: "hospital", layer: "olmran-evil", x: 2773, y: 3339 },
+  { type: "bank", layer: "olmran-evil", x: 2813, y: 3339 },
+  { type: "shop", layer: "olmran-evil", x: 2775, y: 3380 },
+  { type: "repair", layer: "olmran-evil", x: 2814, y: 3377 },
+  { type: "safe", layer: "olmran-evil", x: 2773, y: 3420 }
 ];
