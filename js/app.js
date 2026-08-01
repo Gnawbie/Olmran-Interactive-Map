@@ -239,6 +239,23 @@
     map.getContainer().style.cursor = (tracingActive || devPickerActive || areaDrawActive) ? "crosshair" : "";
   }
 
+  // Toolbar height varies (wraps to multiple rows on narrow/mobile screens,
+  // or when login state changes which buttons are visible), so #map and the
+  // floating panels' default top offset track it live via a CSS variable
+  // instead of a hardcoded pixel value. Neither ResizeObserver nor the
+  // window "resize" event reliably fires for every way the toolbar's size
+  // can change (e.g. some viewport-emulation tools skip both), so this is
+  // also polled on an interval as a cheap, guaranteed-correct fallback.
+  let lastToolbarHeight = null;
+  function syncToolbarHeight() {
+    const toolbar = document.getElementById("toolbar");
+    const h = toolbar.getBoundingClientRect().height;
+    if (h === lastToolbarHeight) return;
+    lastToolbarHeight = h;
+    document.documentElement.style.setProperty("--toolbar-h", `${h}px`);
+    map.invalidateSize();
+  }
+
   function updateTracePreview() {
     if (tracePreviewLayer) {
       map.removeLayer(tracePreviewLayer);
@@ -1220,4 +1237,12 @@
   if (!applyViewFromUrl()) {
     loadLayer(currentLayerId);
   }
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => syncToolbarHeight()).observe(document.getElementById("toolbar"));
+  }
+  window.addEventListener("resize", syncToolbarHeight);
+  window.addEventListener("orientationchange", () => setTimeout(syncToolbarHeight, 100));
+  setInterval(syncToolbarHeight, 400);
+  syncToolbarHeight();
 })();
