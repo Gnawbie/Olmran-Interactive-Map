@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Land of Kaid — Interactive Map</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/style.css?v=18">
+<link rel="stylesheet" href="css/style.css?v=20">
 </head>
 <body>
 
@@ -53,6 +53,16 @@
   <div id="zone-tier-body">
     <input id="zone-tier-search" type="text" placeholder="Filter zones..." autocomplete="off">
     <div id="zone-tier-list"></div>
+  </div>
+</div>
+
+<div id="items-panel">
+  <div id="items-header">
+    <span>Items</span>
+    <button id="items-collapse-btn" title="Collapse/expand">▼</button>
+  </div>
+  <div id="items-body">
+    <div id="items-empty">Nothing here yet.</div>
   </div>
 </div>
 
@@ -147,15 +157,16 @@
   always get the latest version instead of a stale cached copy.
 -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/data/layers.js?v=18"></script>
-<script src="js/data/zones.js?v=18"></script>
-<script src="js/data/markers.js?v=18"></script>
-<script src="js/data/amenities.js?v=18"></script>
-<script src="js/data/zone-amenities.js?v=18"></script>
-<script src="js/data/amenity-points.js?v=18"></script>
-<script src="js/data/tier-paths.js?v=18"></script>
-<script src="js/data/boundary-areas.js?v=18"></script>
-<script src="js/data/dev-accounts.js?v=18"></script>
-<script src="js/app.js?v=18"></script>
+<script src="js/data/layers.js?v=20"></script>
+<script src="js/data/zones.js?v=20"></script>
+<script src="js/data/markers.js?v=20"></script>
+<script src="js/data/amenities.js?v=20"></script>
+<script src="js/data/zone-amenities.js?v=20"></script>
+<script src="js/data/amenity-points.js?v=20"></script>
+<script src="js/data/tier-paths.js?v=20"></script>
+<script src="js/data/boundary-areas.js?v=20"></script>
+<script src="js/data/zone-items.js?v=20"></script>
+<script src="js/data/dev-accounts.js?v=20"></script>
+<script src="js/app.js?v=20"></script>
 </body>
 </html>

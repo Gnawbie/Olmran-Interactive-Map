@@ -624,6 +624,123 @@
     map.setView(xyToLatLng(item.x, item.y), Math.max(map.getZoom(), 0));
     flashAt(item.x, item.y);
     if (item._marker) item._marker.openPopup();
+
+    if (item.kind !== "marker" && item.name && findZoneByName(item.name)) {
+      renderItemsForZone(item.name);
+    }
+  }
+
+  // ---- Items panel: shows the last zone searched/panned to ----
+  function itemCategory(it) {
+    const type = (it.type || "").toLowerCase();
+    const slot = (it.slot || "").toLowerCase();
+    if (type === "edible") return "edible";
+    if (slot === "jewel") return "jewel";
+    if (slot === "weapon") return "weapon";
+    return "armor";
+  }
+
+  function fieldPart(label, value) {
+    if (value === null || value === undefined || value === "") return null;
+    return `${label}: ${value}`;
+  }
+
+  function sigilPart(it) {
+    if (!it.sigil) return null;
+    return `Sigil: ${it.sigil}${it.sigilLvl != null ? " " + it.sigilLvl : ""}`;
+  }
+
+  // Field order per item category, as specified for the Items panel layout.
+  function buildItemMeta(it) {
+    const cat = itemCategory(it);
+    let parts;
+    if (cat === "jewel") {
+      parts = [fieldPart("Spell", it.spell), sigilPart(it)];
+    } else if (cat === "weapon") {
+      parts = [
+        fieldPart("Type", it.type),
+        fieldPart("Spell", it.spell),
+        fieldPart("Damage", it.damage),
+        fieldPart("Fumble", it.fumble),
+        fieldPart("Weight", it.weight),
+        fieldPart("Accuracy", it.accuracy),
+        sigilPart(it),
+      ];
+    } else if (cat === "edible") {
+      parts = ["Edible", fieldPart("Spell", it.spell)];
+    } else {
+      parts = [
+        fieldPart("Spell", it.spell),
+        fieldPart("Defense", it.defense),
+        sigilPart(it),
+        fieldPart("Slot", it.slot),
+        fieldPart("Type", it.type),
+      ];
+    }
+    return parts.filter(Boolean).join(" · ");
+  }
+
+  function renderItemsForZone(zoneName) {
+    const titleEl = document.querySelector("#items-header span");
+    const body = document.getElementById("items-body");
+    const items = ZONE_ITEMS[zoneName];
+    titleEl.textContent = `Items — ${zoneName}`;
+    body.innerHTML = "";
+
+    if (!items || items.length === 0) {
+      const empty = document.createElement("div");
+      empty.id = "items-empty";
+      empty.textContent = "No item data for this zone.";
+      body.appendChild(empty);
+      return;
+    }
+
+    const list = document.createElement("div");
+    list.id = "items-list";
+    items.forEach(it => {
+      const meta = buildItemMeta(it);
+
+      const row = document.createElement("div");
+      row.className = "item-row";
+
+      const top = document.createElement("div");
+      top.className = "item-top";
+
+      const line = document.createElement("div");
+      line.className = "item-line";
+      line.innerHTML = `<span class="item-name">${it.item || "?"}</span>` +
+        (meta ? ` <span class="item-field">${meta}</span>` : "");
+
+      const mobBtn = document.createElement("button");
+      mobBtn.className = "item-mob-btn collapsed";
+      mobBtn.title = "Show dropped-by mob";
+      mobBtn.textContent = "▼";
+
+      const mobLine = document.createElement("div");
+      mobLine.className = "item-mob-line hidden";
+      mobLine.textContent = `Dropped by: ${it.mob || "unknown"}`;
+
+      mobBtn.addEventListener("click", () => {
+        const collapsed = mobBtn.classList.toggle("collapsed");
+        mobLine.classList.toggle("hidden", collapsed);
+      });
+
+      top.appendChild(line);
+      top.appendChild(mobBtn);
+      row.appendChild(top);
+      row.appendChild(mobLine);
+      list.appendChild(row);
+    });
+    body.appendChild(list);
+  }
+
+  function toggleItemsCollapse(forceState) {
+    const panel = document.getElementById("items-panel");
+    const btn = document.getElementById("items-collapse-btn");
+    const collapsed = forceState !== undefined ? forceState : !panel.classList.contains("collapsed");
+    panel.classList.toggle("collapsed", collapsed);
+    btn.classList.toggle("collapsed", collapsed);
+    localStorage.setItem("itemsPanelCollapsed", collapsed ? "1" : "0");
   }
 
   // ---- Shareable view links ----
@@ -1273,6 +1390,9 @@
   renderDevPoints();
   makeDraggable(document.getElementById("control-box"), document.getElementById("control-box-header"), "controlBoxPosition");
   makeDraggable(document.getElementById("zone-tier-panel"), document.getElementById("zone-tier-header"), "zoneTierPanelPosition");
+  makeDraggable(document.getElementById("items-panel"), document.getElementById("items-header"), "itemsPanelPosition");
+  document.getElementById("items-collapse-btn").addEventListener("click", () => toggleItemsCollapse());
+  toggleItemsCollapse(localStorage.getItem("itemsPanelCollapsed") === "1");
   loadDevSession();
   updateAuthUI();
   if (!applyViewFromUrl()) {
