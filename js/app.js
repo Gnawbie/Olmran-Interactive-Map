@@ -86,6 +86,8 @@
     }
 
     renderMarkers();
+    renderAmenityLegend();
+    renderAmenityPalette();
     renderAmenityBadges();
     renderTierPaths();
     renderBoundaryAreas();
@@ -157,7 +159,7 @@
     const badges = amenityIds
       .map(id => amenityDef(id))
       .filter(Boolean)
-      .map(def => `<span class="amenity-badge" style="background:${def.color}">${def.symbol}</span>`)
+      .map(def => `<span class="amenity-badge${def.symbol.length > 1 ? " badge-wide" : ""}" style="background:${def.color}">${def.symbol}</span>`)
       .join("");
     return L.divIcon({
       className: "",
@@ -169,11 +171,12 @@
 
   function amenityPointIcon(id) {
     const def = amenityDef(id);
+    const wide = !!(def && def.symbol && def.symbol.length > 1);
     return L.divIcon({
       className: "",
-      html: `<span class="amenity-badge" style="background:${def ? def.color : "#999"}">${def ? def.symbol : "?"}</span>`,
-      iconSize: [22, 22],
-      iconAnchor: [11, 26]
+      html: `<span class="amenity-badge${wide ? " badge-wide" : ""}" style="background:${def ? def.color : "#999"}">${def ? def.symbol : "?"}</span>`,
+      iconSize: wide ? [30, 22] : [22, 22],
+      iconAnchor: wide ? [15, 26] : [11, 26]
     });
   }
 
@@ -669,15 +672,20 @@
   }
 
   // ---- Dev: drag-and-drop amenity tagging ----
+  function amenityAllowedOnCurrentLayer(def) {
+    return !def.layers || def.layers.includes(currentLayerId);
+  }
+
   function renderAmenityPalette() {
     const wrap = document.getElementById("dev-amenity-palette");
     wrap.innerHTML = "";
-    AMENITY_TYPES.filter(def => !def.hidden).forEach(def => {
+    AMENITY_TYPES.filter(def => !def.hidden && amenityAllowedOnCurrentLayer(def)).forEach(def => {
       const chip = document.createElement("div");
       chip.className = "amenity-drag-chip";
       chip.draggable = true;
       chip.style.background = def.color;
-      chip.innerHTML = `<span class="chip-symbol">${def.symbol}</span><span>${def.label}</span>`;
+      const symbolClass = "chip-symbol" + (def.symbol.length > 1 ? " wide" : "");
+      chip.innerHTML = `<span class="${symbolClass}">${def.symbol}</span><span>${def.label}</span>`;
       chip.addEventListener("dragstart", (e) => {
         e.dataTransfer.setData("text/plain", def.id);
         e.dataTransfer.effectAllowed = "copy";
@@ -701,12 +709,13 @@
   function renderAmenityLegend() {
     const wrap = document.getElementById("amenity-legend");
     wrap.innerHTML = "";
-    AMENITY_TYPES.filter(def => !def.hidden).forEach(def => {
+    AMENITY_TYPES.filter(def => !def.hidden && amenityAllowedOnCurrentLayer(def)).forEach(def => {
       const row = document.createElement("div");
       const hidden = hiddenAmenityTypes.has(def.id);
       row.className = "amenity-legend-row" + (hidden ? " legend-hidden" : "");
       row.title = hidden ? `Click to show ${def.label} on the map` : `Click to hide ${def.label} on the map`;
-      row.innerHTML = `<span class="amenity-badge" style="background:${def.color}">${def.symbol}</span><span>${def.label}</span>`;
+      const badgeClass = "amenity-badge" + (def.symbol.length > 1 ? " badge-wide" : "");
+      row.innerHTML = `<span class="${badgeClass}" style="background:${def.color}">${def.symbol}</span><span>${def.label}</span>`;
       row.addEventListener("click", () => {
         if (hiddenAmenityTypes.has(def.id)) hiddenAmenityTypes.delete(def.id);
         else hiddenAmenityTypes.add(def.id);
@@ -1617,8 +1626,6 @@
   });
   renderLayerSelect();
   renderFilterChips();
-  renderAmenityLegend();
-  renderAmenityPalette();
   updateTagStatus();
   updateTraceStatus();
   updateAreaStatus();
