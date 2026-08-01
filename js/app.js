@@ -241,7 +241,7 @@
     });
   }
 
-  function buildUserIconPopup(icon) {
+  function buildUserIconPopup(icon, marker) {
     const t = userIconTypeDef(icon.type);
     const content = document.createElement("div");
     content.className = "map-popup user-icon-popup";
@@ -268,6 +268,21 @@
       flashButton(saveBtn, "Saved!");
     });
 
+    const lockBtn = document.createElement("button");
+    lockBtn.className = "user-icon-lock-btn";
+    function refreshLockBtn() {
+      lockBtn.textContent = icon.locked ? "🔒 Locked" : "🔓 Unlocked";
+      lockBtn.title = icon.locked ? "Click to unlock (allow moving)" : "Click to lock (prevent moving)";
+    }
+    refreshLockBtn();
+    lockBtn.addEventListener("click", () => {
+      icon.locked = !icon.locked;
+      saveUserIcons();
+      refreshLockBtn();
+      if (icon.locked) marker.dragging.disable();
+      else marker.dragging.enable();
+    });
+
     const removeBtn = document.createElement("button");
     removeBtn.className = "user-icon-remove-btn";
     removeBtn.textContent = "Remove icon";
@@ -280,6 +295,7 @@
     });
 
     actions.appendChild(saveBtn);
+    actions.appendChild(lockBtn);
     actions.appendChild(removeBtn);
     content.appendChild(actions);
     return content;
@@ -290,8 +306,18 @@
     USER_ICONS
       .filter(icon => icon.layer === currentLayerId)
       .forEach(icon => {
-        const marker = L.marker(xyToLatLng(icon.x, icon.y), { icon: userIconMarkerIcon(icon.type) });
-        marker.bindPopup(buildUserIconPopup(icon));
+        const marker = L.marker(xyToLatLng(icon.x, icon.y), {
+          icon: userIconMarkerIcon(icon.type),
+          draggable: !icon.locked
+        });
+        marker.on("dragend", () => {
+          const raw = latLngToXY(marker.getLatLng());
+          const { x, y } = clampToLayerBounds(icon.layer, raw.x, raw.y);
+          icon.x = x;
+          icon.y = y;
+          saveUserIcons();
+        });
+        marker.bindPopup(buildUserIconPopup(icon, marker));
         userIconLayerGroup.addLayer(marker);
       });
     userIconLayerGroup.addTo(map);
@@ -1316,7 +1342,7 @@
     if (armedUserIconType) {
       const raw = latLngToXY(e.latlng);
       const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
-      USER_ICONS.push({ type: armedUserIconType, layer: currentLayerId, x, y, note: "" });
+      USER_ICONS.push({ type: armedUserIconType, layer: currentLayerId, x, y, note: "", locked: false });
       saveUserIcons();
       renderUserIcons();
       flashAt(x, y);

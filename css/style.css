@@ -1044,6 +1044,11 @@ html, body {
   color: #e88;
 }
 
+.user-icon-lock-btn {
+  background: #4a4a52;
+  color: #f0f0f0;
+}
+
 /* Leaflet popup theming */
 .leaflet-popup-content-wrapper {
   background: #1e222b;
