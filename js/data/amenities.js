@@ -2,14 +2,12 @@
 // has no confirmed icon on the source map yet (see zone-amenities.js) — add
 // zones to ZONE_AMENITIES once that symbol is identified.
 const AMENITY_TYPES = [
+  { id: "boss", label: "Boss", symbol: "B", color: "#f97316" },
   { id: "hospital", label: "Hospital", symbol: "H", color: "#e0615c" },
   { id: "bank", label: "Bank", symbol: "B", color: "#e0b64c" },
   { id: "shop", label: "Shop", symbol: "S", color: "#5c9ee0" },
   { id: "repair", label: "Repair", symbol: "R", color: "#9a9a9a" },
   { id: "safe", label: "Safe Area", symbol: "✓", color: "#5cc26a" },
-  { id: "evil", label: "Evil Starting Area", symbol: "E", color: "#d92b2b" },
-  { id: "good", label: "Good Starting Area", symbol: "G", color: "#2b6fd9" },
-  { id: "chaos", label: "Chaos Starting Area", symbol: "C", color: "#2bb84a" },
   // The zone-* tier types are intentionally excluded from the legend, the
   // map badges, and the drag-tag palette (see renderAmenityLegend,
   // renderAmenityBadges, renderAmenityPalette) — the boundary-area tool now
