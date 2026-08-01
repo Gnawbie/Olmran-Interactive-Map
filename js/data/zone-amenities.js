@@ -14,11 +14,11 @@
 // pathway boundaries, use the dev "Trace tier path" tool instead, which
 // draws real overlays at hand-picked coordinates.
 //
-// A few spreadsheet area names use different spellings than the map/zones.js
-// (e.g. "Terngild" -> Cerngild, "Kercpa Lair" -> Kerpea Lair, "Azulago
-// Village" -> Azurlago Village, "Timetold Range" -> Cimetold Range, "Ruins
-// of Helk" -> Ruins of Belh, "Dunes of Al'kafi" -> Dunes of Al'Rafi) — these
-// were matched by hand assuming they refer to the same in-game location.
+// A couple of spreadsheet area names still don't exactly match zones.js
+// ("Ruins of Helk" -> Ruins of Belh, "Dunes of Al'kafi" -> Dunes of Al'Rafi)
+// — matched by hand assuming they refer to the same in-game location.
+// (Terngild, Kercpa Lair, Azulago Village, and Timetold Range were originally
+// transcribed differently here but corrected per tester feedback.)
 //
 // No "safe area" icon was identifiable anywhere on the map — add zones here
 // (or via the dev drag-and-drop tagging tool) once that symbol is known.
@@ -29,11 +29,11 @@ const ZONE_AMENITIES = {
   "Fury Mountains": ["zone-red"],
   "Town of Green Hills": ["hospital", "zone-green"],
   "Riverswift Downs": ["zone-green"],
-  "Cimetold Range": ["zone-red"],
+  "Timetold Range": ["zone-red"],
   "Green Valley": ["zone-green"],
   "Namm River": ["zone-green", "zone-white"],
   "Fire Valley (North)": ["zone-green", "zone-white"],
-  "Fire Valley (South)": ["zone-green", "zone-white"],
+  "Fire Valley (South / Circle)": ["zone-green", "zone-white"],
   "Ruins of Belh": ["zone-red"],
   "Al'nomi Graveyard": ["zone-white"],
   "Village of Al'nomi": ["shop", "hospital", "bank", "repair", "zone-white"],
@@ -42,7 +42,7 @@ const ZONE_AMENITIES = {
   "Field of Sorrow": ["hospital", "zone-green", "zone-white"],
   "Kaid Local (North)": ["zone-white"],
   "Kaid Local (South)": ["zone-white"],
-  "Kerpea Lair": ["zone-red"],
+  "Kercpa Lair": ["zone-red"],
   "Pacific Lowlands": ["zone-green", "zone-white"],
   "Freehold": ["shop", "hospital", "bank", "repair", "zone-white"],
   "Freehold Cemetery": ["zone-white"],
@@ -52,7 +52,7 @@ const ZONE_AMENITIES = {
   "Dire Mountains": ["zone-red"],
   "Vale Fort": ["hospital", "zone-red"],
   "River Valley": ["zone-green"],
-  "Azurlago Village": ["hospital", "zone-red"],
+  "Azulago Village": ["hospital", "zone-red"],
   "Planes of Suffering": ["zone-purple"],
   "Buccaneer's Den": ["shop", "hospital", "bank", "repair", "zone-white"],
   "Temple of Ahrimal": ["hospital", "zone-purple"],
@@ -66,7 +66,7 @@ const ZONE_AMENITIES = {
   "Tokat Bamboo Forest": ["zone-green"],
   "Nosho Rainforest": ["zone-green"],
   "Thousand Falls": ["hospital", "zone-red"],
-  "Cerngild, Lost City of Gold": ["hospital", "zone-purple", "zone-red"],
+  "Terngild, Lost City of Gold": ["hospital", "zone-purple", "zone-red"],
   "Imperial City of Kaid": ["zone-white"],
   "Religious Quarters (Imperial City)": ["hospital", "zone-green"],
   "Merchant Quarters (Imperial City)": ["zone-green", "zone-white"],
