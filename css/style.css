@@ -233,8 +233,48 @@ html, body {
   font-weight: 600;
 }
 
-#dev-toggle {
+#dev-login-btn {
   margin-left: auto;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #cfd4e0;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#dev-session-badge {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#dev-session-user {
+  font-size: 12px;
+  color: #8ea0d0;
+  white-space: nowrap;
+}
+
+#dev-session-user::before {
+  content: "👤 ";
+}
+
+#dev-manage-btn,
+#dev-logout-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #cfd4e0;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#dev-toggle {
   padding: 7px 12px;
   border-radius: 6px;
   border: 1px solid #5c4a2a;
@@ -512,4 +552,133 @@ html, body {
   stroke-width: 3;
   fill: #ffd76c;
   fill-opacity: 0.15;
+}
+
+/* Login / account management modals */
+#login-overlay, #manage-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2000;
+  background: rgba(10, 11, 14, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#login-overlay.hidden, #manage-overlay.hidden { display: none; }
+
+#login-modal, #manage-modal {
+  width: 320px;
+  max-width: 90vw;
+  background: #191c24;
+  border: 1px solid #3a3f4b;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  color: #e8e8e8;
+}
+
+#manage-modal { width: 380px; }
+
+#login-modal h3, #manage-modal h3 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+#login-modal label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #8ea0d0;
+  margin: 10px 0 4px;
+}
+
+#login-modal input,
+#manage-add input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0f0f0;
+  font-size: 13px;
+}
+
+#login-error, #manage-error {
+  min-height: 16px;
+  font-size: 12px;
+  color: #e0615c;
+  margin-top: 8px;
+}
+
+#login-buttons, #manage-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+#login-buttons button, #manage-buttons button {
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #cfd4e0;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+#login-submit, #manage-add-btn {
+  background: #6c8cff;
+  border-color: #6c8cff;
+  color: #12141a;
+  font-weight: 600;
+}
+
+#manage-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #2c313d;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.manage-account-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  border-bottom: 1px solid #22262f;
+}
+
+.manage-account-row:last-child { border-bottom: none; }
+
+.manage-account-row .acct-name { flex: 1; }
+
+.manage-account-row .acct-role {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #8ea0d0;
+}
+
+.manage-account-row button {
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid #5c2a2a;
+  background: #3a1717;
+  color: #f0a0a0;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+#manage-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
 }

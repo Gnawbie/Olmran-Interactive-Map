@@ -11,6 +11,7 @@
   const activeTypeFilters = new Set();
   let recenterTargetName = "";
   const modifiedZoneNames = new Set();
+  let devSession = null; // { username, role }
 
   const map = L.map("map", {
     crs: L.CRS.Simple,
@@ -484,10 +485,132 @@
   }
 
   function toggleDevPicker(forceState) {
-    devPickerActive = forceState !== undefined ? forceState : !devPickerActive;
+    const next = forceState !== undefined ? forceState : !devPickerActive;
+    if (next && !devSession) return; // can't turn on without a session, but always allow turning off
+    devPickerActive = next;
     document.getElementById("dev-toggle").classList.toggle("active", devPickerActive);
     document.getElementById("dev-panel").classList.toggle("hidden", !devPickerActive);
     map.getContainer().style.cursor = devPickerActive ? "crosshair" : "";
+  }
+
+  // ---- Dev login (PBKDF2-hashed, client-side only — see dev-accounts.js) ----
+  function hexToBytes(hex) {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+    return bytes;
+  }
+
+  function bytesToHex(bytes) {
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function randomSaltHex() {
+    return bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
+  }
+
+  async function pbkdf2Hash(password, saltHex, iterations) {
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(password), { name: "PBKDF2" }, false, ["deriveBits"]
+    );
+    const derivedBits = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", salt: hexToBytes(saltHex), iterations, hash: "SHA-256" },
+      keyMaterial,
+      256
+    );
+    return bytesToHex(new Uint8Array(derivedBits));
+  }
+
+  function findAccount(username) {
+    return DEV_ACCOUNTS.find(a => a.username.toLowerCase() === username.toLowerCase());
+  }
+
+  async function attemptLogin(username, password) {
+    const account = findAccount(username);
+    if (!account) return null;
+    const computed = await pbkdf2Hash(password, account.salt, account.iterations);
+    return computed === account.hash ? account : null;
+  }
+
+  function loadDevSession() {
+    try {
+      const raw = sessionStorage.getItem("devSession");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (findAccount(parsed.username)) devSession = parsed;
+      }
+    } catch (e) { devSession = null; }
+  }
+
+  function saveDevSession() {
+    if (devSession) sessionStorage.setItem("devSession", JSON.stringify(devSession));
+    else sessionStorage.removeItem("devSession");
+  }
+
+  function updateAuthUI() {
+    const loggedIn = !!devSession;
+    document.getElementById("dev-login-btn").classList.toggle("hidden", loggedIn);
+    document.getElementById("dev-session-badge").classList.toggle("hidden", !loggedIn);
+    document.getElementById("dev-toggle").classList.toggle("hidden", !loggedIn);
+    document.getElementById("dev-manage-btn").classList.toggle("hidden", !(loggedIn && devSession.role === "main"));
+    document.getElementById("dev-session-user").textContent = loggedIn ? devSession.username : "";
+    if (!loggedIn) toggleDevPicker(false);
+  }
+
+  function toggleLoginOverlay(show) {
+    document.getElementById("login-overlay").classList.toggle("hidden", !show);
+    document.getElementById("login-error").textContent = "";
+    if (show) {
+      document.getElementById("login-username").value = "";
+      document.getElementById("login-password").value = "";
+      document.getElementById("login-username").focus();
+    }
+  }
+
+  function toggleManageOverlay(show) {
+    document.getElementById("manage-overlay").classList.toggle("hidden", !show);
+    document.getElementById("manage-error").textContent = "";
+    if (show) renderManageList();
+  }
+
+  function renderManageList() {
+    const wrap = document.getElementById("manage-list");
+    wrap.innerHTML = "";
+    DEV_ACCOUNTS.forEach(account => {
+      const row = document.createElement("div");
+      row.className = "manage-account-row";
+      const name = document.createElement("span");
+      name.className = "acct-name";
+      name.textContent = account.username;
+      const role = document.createElement("span");
+      role.className = "acct-role";
+      role.textContent = account.role;
+      row.append(name, role);
+      if (account.role !== "main") {
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "Remove";
+        removeBtn.addEventListener("click", () => {
+          const idx = DEV_ACCOUNTS.indexOf(account);
+          if (idx !== -1) DEV_ACCOUNTS.splice(idx, 1);
+          renderManageList();
+        });
+        row.appendChild(removeBtn);
+      }
+      wrap.appendChild(row);
+    });
+  }
+
+  function formatDevAccountsFile(accounts) {
+    const lines = accounts.map(a => {
+      const fields = [
+        `username: ${JSON.stringify(a.username)}`,
+        `salt: ${JSON.stringify(a.salt)}`,
+        `hash: ${JSON.stringify(a.hash)}`,
+        `iterations: ${a.iterations}`,
+        `role: ${JSON.stringify(a.role)}`
+      ];
+      return `  {\n    ${fields.join(",\n    ")}\n  }`;
+    });
+    return `const DEV_ACCOUNTS = [\n${lines.join(",\n")}\n];\n`;
   }
 
   // ---- Dev: re-center a zone by clicking the map ----
@@ -560,6 +683,7 @@
   mapContainer.addEventListener("drop", (e) => {
     e.preventDefault();
     mapContainer.classList.remove("drag-over-active");
+    if (!devSession) return;
     const amenityId = e.dataTransfer.getData("text/plain");
     if (!amenityDef(amenityId)) return;
     const raw = latLngToXY(map.mouseEventToLatLng(e));
@@ -606,6 +730,84 @@
     }
   });
 
+  // ---- Wire up login / account management UI ----
+  document.getElementById("dev-login-btn").addEventListener("click", () => toggleLoginOverlay(true));
+  document.getElementById("login-cancel").addEventListener("click", () => toggleLoginOverlay(false));
+  document.getElementById("login-overlay").addEventListener("click", (e) => {
+    if (e.target.id === "login-overlay") toggleLoginOverlay(false);
+  });
+  async function submitLogin() {
+    const username = document.getElementById("login-username").value.trim();
+    const password = document.getElementById("login-password").value;
+    const errorEl = document.getElementById("login-error");
+    if (!username || !password) {
+      errorEl.textContent = "Enter a username and password.";
+      return;
+    }
+    const submitBtn = document.getElementById("login-submit");
+    submitBtn.disabled = true;
+    errorEl.textContent = "";
+    try {
+      const account = await attemptLogin(username, password);
+      if (!account) {
+        errorEl.textContent = "Invalid username or password.";
+        return;
+      }
+      devSession = { username: account.username, role: account.role };
+      saveDevSession();
+      updateAuthUI();
+      toggleLoginOverlay(false);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+  document.getElementById("login-submit").addEventListener("click", submitLogin);
+  document.getElementById("login-password").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") submitLogin();
+  });
+  document.getElementById("dev-logout-btn").addEventListener("click", () => {
+    devSession = null;
+    saveDevSession();
+    updateAuthUI();
+  });
+  document.getElementById("dev-manage-btn").addEventListener("click", () => toggleManageOverlay(true));
+  document.getElementById("manage-close-btn").addEventListener("click", () => toggleManageOverlay(false));
+  document.getElementById("manage-overlay").addEventListener("click", (e) => {
+    if (e.target.id === "manage-overlay") toggleManageOverlay(false);
+  });
+  document.getElementById("manage-add-btn").addEventListener("click", async () => {
+    const usernameEl = document.getElementById("manage-new-username");
+    const passwordEl = document.getElementById("manage-new-password");
+    const username = usernameEl.value.trim();
+    const password = passwordEl.value;
+    const errorEl = document.getElementById("manage-error");
+    errorEl.textContent = "";
+    if (!username || !password) {
+      errorEl.textContent = "Enter a username and password.";
+      return;
+    }
+    if (findAccount(username)) {
+      errorEl.textContent = "That username already exists.";
+      return;
+    }
+    const addBtn = document.getElementById("manage-add-btn");
+    addBtn.disabled = true;
+    try {
+      const salt = randomSaltHex();
+      const iterations = 200000;
+      const hash = await pbkdf2Hash(password, salt, iterations);
+      DEV_ACCOUNTS.push({ username, salt, hash, iterations, role: "dev" });
+      usernameEl.value = "";
+      passwordEl.value = "";
+      renderManageList();
+    } finally {
+      addBtn.disabled = false;
+    }
+  });
+  document.getElementById("manage-export-btn").addEventListener("click", (e) => {
+    copyToClipboard(formatDevAccountsFile(DEV_ACCOUNTS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
+  });
+
   renderZoneSelect();
   renderDevZoneTargetSelect();
   renderLayerSelect();
@@ -615,6 +817,8 @@
   updateTagStatus();
   renderDevPoints();
   makeDraggable(document.getElementById("control-box"), document.getElementById("control-box-header"), "controlBoxPosition");
+  loadDevSession();
+  updateAuthUI();
   if (!applyViewFromUrl()) {
     loadLayer(currentLayerId);
   }

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Land of Kaid — Interactive Map</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/style.css?v=3">
+<link rel="stylesheet" href="css/style.css?v=4">
 </head>
 <body>
 
@@ -21,7 +21,13 @@
 
   <div id="filter-wrap"></div>
 
-  <button id="dev-toggle" title="Toggle coordinate picker for adding markers/zones">Dev: Pick Coords</button>
+  <button id="dev-login-btn">Dev Login</button>
+  <div id="dev-session-badge" class="hidden">
+    <span id="dev-session-user"></span>
+    <button id="dev-manage-btn" class="hidden">Manage Devs</button>
+    <button id="dev-logout-btn">Logout</button>
+  </div>
+  <button id="dev-toggle" class="hidden" title="Toggle coordinate picker for adding markers/zones">Dev: Pick Coords</button>
 </div>
 
 <div id="map"></div>
@@ -66,6 +72,38 @@
   </div>
 </div>
 
+<div id="login-overlay" class="hidden">
+  <div id="login-modal">
+    <h3>Dev Login</h3>
+    <label for="login-username">Username</label>
+    <input id="login-username" type="text" autocomplete="username">
+    <label for="login-password">Password</label>
+    <input id="login-password" type="password" autocomplete="current-password">
+    <div id="login-error"></div>
+    <div id="login-buttons">
+      <button id="login-submit">Log In</button>
+      <button id="login-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="manage-overlay" class="hidden">
+  <div id="manage-modal">
+    <h3>Manage Dev Accounts</h3>
+    <div id="manage-list"></div>
+    <div id="manage-add">
+      <input id="manage-new-username" type="text" placeholder="New username" autocomplete="off">
+      <input id="manage-new-password" type="password" placeholder="New password" autocomplete="new-password">
+      <button id="manage-add-btn">Add Account</button>
+    </div>
+    <div id="manage-error"></div>
+    <div id="manage-buttons">
+      <button id="manage-export-btn">Copy Updated dev-accounts.js</button>
+      <button id="manage-close-btn">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="popup-template" class="hidden"></div>
 
 <!--
@@ -75,12 +113,13 @@
   always get the latest version instead of a stale cached copy.
 -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/data/layers.js?v=3"></script>
-<script src="js/data/zones.js?v=3"></script>
-<script src="js/data/markers.js?v=3"></script>
-<script src="js/data/amenities.js?v=3"></script>
-<script src="js/data/zone-amenities.js?v=3"></script>
-<script src="js/data/amenity-points.js?v=3"></script>
-<script src="js/app.js?v=3"></script>
+<script src="js/data/layers.js?v=4"></script>
+<script src="js/data/zones.js?v=4"></script>
+<script src="js/data/markers.js?v=4"></script>
+<script src="js/data/amenities.js?v=4"></script>
+<script src="js/data/zone-amenities.js?v=4"></script>
+<script src="js/data/amenity-points.js?v=4"></script>
+<script src="js/data/dev-accounts.js?v=4"></script>
+<script src="js/app.js?v=4"></script>
 </body>
 </html>
