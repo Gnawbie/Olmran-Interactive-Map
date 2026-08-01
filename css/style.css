@@ -29,7 +29,7 @@ html, body {
   left: 0;
   right: 0;
   min-height: 56px;
-  z-index: 1000;
+  z-index: 1600;
   background: #14171c;
   color: #e8e8e8;
   display: flex;
@@ -305,7 +305,8 @@ html, body {
   max-height: 320px;
   overflow-y: auto;
   display: none;
-  z-index: 1001;
+  z-index: 1500;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
 }
 
 #search-results.visible { display: block; }
