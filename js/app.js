@@ -383,6 +383,18 @@
       }
     }
     boundaryAreaLayerGroup.addTo(map);
+    setBoundaryAreaOverlaysInteractive(!areaDrawActive);
+  }
+
+  // While actively drawing a new area, existing overlays must not intercept
+  // clicks meant for the in-progress polygon — otherwise you can't trace a
+  // new shape that overlaps a saved one, since clicking it just opens its
+  // popup instead of adding a point.
+  function setBoundaryAreaOverlaysInteractive(interactive) {
+    boundaryAreaLayerGroup.eachLayer(layer => {
+      const el = layer.getElement && layer.getElement();
+      if (el) el.style.pointerEvents = interactive ? "" : "none";
+    });
   }
 
   function clearAreaPreview() {
@@ -428,6 +440,7 @@
       currentAreaPoints = [];
       clearAreaPreview();
     }
+    setBoundaryAreaOverlaysInteractive(!areaDrawActive);
     updateMapCursor();
     updateAreaStatus();
   }
