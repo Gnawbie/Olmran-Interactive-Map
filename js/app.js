@@ -11,11 +11,10 @@
   let tracingActive = false;
   let currentTracePoints = [];
   const TIER_PATH_COLORS = { green: "#4ade56", red: "#d92b2b", purple: "#9b59d6" };
-  let boundaryBoxLayerGroup = L.layerGroup();
-  let boxPreviewLayer = null;
-  let boxDrawActive = false;
-  let boxCorner1 = null;
-  let boxCorner2 = null;
+  let boundaryAreaLayerGroup = L.layerGroup();
+  let areaPreviewLayer = null;
+  let areaDrawActive = false;
+  let currentAreaPoints = [];
   const layerImageCache = {};
   let devPickerActive = false;
   const devPoints = [];
@@ -84,7 +83,7 @@
     renderMarkers();
     renderAmenityBadges();
     renderTierPaths();
-    renderBoundaryBoxes();
+    renderBoundaryAreas();
   }
 
   function markerIcon(type) {
@@ -237,7 +236,7 @@
   }
 
   function updateMapCursor() {
-    map.getContainer().style.cursor = (tracingActive || devPickerActive || boxDrawActive) ? "crosshair" : "";
+    map.getContainer().style.cursor = (tracingActive || devPickerActive || areaDrawActive) ? "crosshair" : "";
   }
 
   function updateTracePreview() {
@@ -308,114 +307,137 @@
     return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
   }
 
-  function buildRecoloredOverlayDataUrl(img, box) {
-    const w = Math.round(box.x2 - box.x1);
-    const h = Math.round(box.y2 - box.y1);
+  function pointInPolygon(x, y, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1];
+      const xj = poly[j][0], yj = poly[j][1];
+      const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  function buildRecoloredAreaOverlayDataUrl(img, area) {
+    const xs = area.points.map(p => p[0]);
+    const ys = area.points.map(p => p[1]);
+    const x1 = Math.min(...xs), x2 = Math.max(...xs);
+    const y1 = Math.min(...ys), y2 = Math.max(...ys);
+    const w = Math.max(1, Math.round(x2 - x1));
+    const h = Math.max(1, Math.round(y2 - y1));
+    const localPoly = area.points.map(([x, y]) => [x - x1, y - y1]);
+
     const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, box.x1, box.y1, w, h, 0, 0, w, h);
+    ctx.drawImage(img, x1, y1, w, h, 0, 0, w, h);
     const imageData = ctx.getImageData(0, 0, w, h);
     const data = imageData.data;
-    const rgb = hexToRgbObj(TIER_PATH_COLORS[box.tier]);
-    for (let i = 0; i < data.length; i += 4) {
-      if (data[i] > 235 && data[i + 1] > 235 && data[i + 2] > 235) {
-        data[i] = rgb.r;
-        data[i + 1] = rgb.g;
-        data[i + 2] = rgb.b;
-        data[i + 3] = 220;
-      } else {
-        data[i + 3] = 0;
+    const rgb = hexToRgbObj(TIER_PATH_COLORS[area.tier]);
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const i = (py * w + px) * 4;
+        const isWhite = data[i] > 235 && data[i + 1] > 235 && data[i + 2] > 235;
+        if (isWhite && pointInPolygon(px, py, localPoly)) {
+          data[i] = rgb.r;
+          data[i + 1] = rgb.g;
+          data[i + 2] = rgb.b;
+          data[i + 3] = 220;
+        } else {
+          data[i + 3] = 0;
+        }
       }
     }
     ctx.putImageData(imageData, 0, 0);
-    return canvas.toDataURL("image/png");
+    return { dataUrl: canvas.toDataURL("image/png"), bounds: [x1, y1, x2, y2] };
   }
 
-  async function renderBoundaryBoxes() {
-    const boxes = BOUNDARY_BOXES.filter(b => b.layer === currentLayerId);
-    boundaryBoxLayerGroup.clearLayers();
-    for (const box of boxes) {
+  async function renderBoundaryAreas() {
+    const areas = BOUNDARY_AREAS.filter(a => a.layer === currentLayerId);
+    boundaryAreaLayerGroup.clearLayers();
+    for (const area of areas) {
       try {
-        const img = await getLayerImage(box.layer);
-        const dataUrl = buildRecoloredOverlayDataUrl(img, box);
-        const bounds = [xyToLatLng(box.x1, box.y1), xyToLatLng(box.x2, box.y2)];
-        const overlay = L.imageOverlay(dataUrl, bounds, { interactive: true });
+        const img = await getLayerImage(area.layer);
+        const { dataUrl, bounds } = buildRecoloredAreaOverlayDataUrl(img, area);
+        const latlngBounds = [xyToLatLng(bounds[0], bounds[1]), xyToLatLng(bounds[2], bounds[3])];
+        const overlay = L.imageOverlay(dataUrl, latlngBounds, { interactive: true });
         const content = document.createElement("div");
         content.className = "map-popup";
-        const label = box.tier.charAt(0).toUpperCase() + box.tier.slice(1);
-        content.innerHTML = `<h3>${label} Box</h3><p>${Math.round(box.x2 - box.x1)}×${Math.round(box.y2 - box.y1)}px</p>`;
+        const label = area.tier.charAt(0).toUpperCase() + area.tier.slice(1);
+        content.innerHTML = `<h3>${label} Area</h3><p>${area.points.length} points</p>`;
         const removeBtn = document.createElement("button");
         removeBtn.textContent = "Remove";
         removeBtn.className = "amenity-point-remove";
         removeBtn.addEventListener("click", () => {
-          const idx = BOUNDARY_BOXES.indexOf(box);
-          if (idx !== -1) BOUNDARY_BOXES.splice(idx, 1);
-          renderBoundaryBoxes();
-          updateBoxStatus();
+          const idx = BOUNDARY_AREAS.indexOf(area);
+          if (idx !== -1) BOUNDARY_AREAS.splice(idx, 1);
+          renderBoundaryAreas();
+          updateAreaStatus();
         });
         content.appendChild(removeBtn);
         overlay.bindPopup(content);
-        boundaryBoxLayerGroup.addLayer(overlay);
+        boundaryAreaLayerGroup.addLayer(overlay);
       } catch (e) {
-        console.error("Failed to render boundary box", e);
+        console.error("Failed to render boundary area", e);
       }
     }
-    boundaryBoxLayerGroup.addTo(map);
+    boundaryAreaLayerGroup.addTo(map);
   }
 
-  function clearBoxPreview() {
-    if (boxPreviewLayer) {
-      map.removeLayer(boxPreviewLayer);
-      boxPreviewLayer = null;
+  function clearAreaPreview() {
+    if (areaPreviewLayer) {
+      map.removeLayer(areaPreviewLayer);
+      areaPreviewLayer = null;
     }
   }
 
-  function updateBoxPreview() {
-    clearBoxPreview();
-    if (!boxCorner1) return;
+  function updateAreaPreview() {
+    clearAreaPreview();
+    if (currentAreaPoints.length === 0) return;
     const group = L.layerGroup();
-    L.circleMarker(xyToLatLng(boxCorner1[0], boxCorner1[1]), { radius: 5, color: "#ffd76c", fillColor: "#ffd76c", fillOpacity: 1 }).addTo(group);
-    if (boxCorner2) {
-      const bounds = [xyToLatLng(boxCorner1[0], boxCorner1[1]), xyToLatLng(boxCorner2[0], boxCorner2[1])];
-      L.rectangle(bounds, { color: "#ffd76c", weight: 3, dashArray: "6,6", fillOpacity: 0.1 }).addTo(group);
+    const latlngs = currentAreaPoints.map(([x, y]) => xyToLatLng(x, y));
+    if (latlngs.length > 1) {
+      L.polygon(latlngs, { color: "#ffd76c", weight: 3, dashArray: "6,6", fillOpacity: 0.08 }).addTo(group);
     }
-    boxPreviewLayer = group;
-    boxPreviewLayer.addTo(map);
+    latlngs.forEach(ll => {
+      L.circleMarker(ll, { radius: 4, color: "#ffd76c", fillColor: "#ffd76c", fillOpacity: 1 }).addTo(group);
+    });
+    areaPreviewLayer = group;
+    areaPreviewLayer.addTo(map);
   }
 
-  function updateBoxStatus() {
-    const el = document.getElementById("box-status");
-    if (!boxDrawActive) {
-      el.textContent = `${BOUNDARY_BOXES.length} box(es) saved`;
+  function updateAreaStatus() {
+    const el = document.getElementById("area-status");
+    if (!areaDrawActive) {
+      el.textContent = `${BOUNDARY_AREAS.length} area(s) saved`;
       return;
     }
-    if (!boxCorner1) el.textContent = "Click the first corner";
-    else if (!boxCorner2) el.textContent = "Click the opposite corner";
-    else el.textContent = "Pick a tier to save, or Cancel";
+    el.textContent = currentAreaPoints.length < 3
+      ? `${currentAreaPoints.length} point(s) — need at least 3 to save`
+      : `${currentAreaPoints.length} point(s) — pick a tier to save (auto-closes to point 1), or Undo/Cancel`;
   }
 
-  function toggleBoxDraw(forceState) {
-    const next = forceState !== undefined ? forceState : !boxDrawActive;
+  function toggleAreaDraw(forceState) {
+    const next = forceState !== undefined ? forceState : !areaDrawActive;
     if (next && !devSession) return;
-    boxDrawActive = next;
-    document.getElementById("box-toggle-btn").textContent = boxDrawActive ? "Stop Box" : "Start Box";
-    document.getElementById("box-toggle-btn").classList.toggle("active", boxDrawActive);
-    if (!boxDrawActive) {
-      boxCorner1 = null;
-      boxCorner2 = null;
-      clearBoxPreview();
+    areaDrawActive = next;
+    document.getElementById("area-toggle-btn").textContent = areaDrawActive ? "Stop Area" : "Start Area";
+    document.getElementById("area-toggle-btn").classList.toggle("active", areaDrawActive);
+    if (!areaDrawActive) {
+      currentAreaPoints = [];
+      clearAreaPreview();
     }
     updateMapCursor();
-    updateBoxStatus();
+    updateAreaStatus();
   }
 
-  function formatBoundaryBoxesFile(boxes) {
-    const lines = boxes.map(b =>
-      `  { tier: ${JSON.stringify(b.tier)}, layer: ${JSON.stringify(b.layer)}, x1: ${Math.round(b.x1)}, y1: ${Math.round(b.y1)}, x2: ${Math.round(b.x2)}, y2: ${Math.round(b.y2)} }`
-    );
-    return `const BOUNDARY_BOXES = [\n${lines.join(",\n")}\n];\n`;
+  function formatBoundaryAreasFile(areas) {
+    const lines = areas.map(a => {
+      const pts = a.points.map(([x, y]) => `[${Math.round(x)}, ${Math.round(y)}]`).join(", ");
+      return `  { tier: ${JSON.stringify(a.tier)}, layer: ${JSON.stringify(a.layer)}, points: [${pts}] }`;
+    });
+    return `const BOUNDARY_AREAS = [\n${lines.join(",\n")}\n];\n`;
   }
 
   // ---- Dev: drag-and-drop amenity tagging ----
@@ -842,7 +864,7 @@
     if (!loggedIn) {
       toggleDevPicker(false);
       toggleTracing(false);
-      toggleBoxDraw(false);
+      toggleAreaDraw(false);
     }
   }
 
@@ -940,18 +962,12 @@
   }
 
   map.on("click", (e) => {
-    if (boxDrawActive) {
+    if (areaDrawActive) {
       const raw = latLngToXY(e.latlng);
       const { x, y } = clampToLayerBounds(currentLayerId, raw.x, raw.y);
-      if (!boxCorner1) {
-        boxCorner1 = [x, y];
-      } else if (!boxCorner2) {
-        boxCorner2 = [x, y];
-      } else {
-        return;
-      }
-      updateBoxPreview();
-      updateBoxStatus();
+      currentAreaPoints.push([x, y]);
+      updateAreaPreview();
+      updateAreaStatus();
       return;
     }
 
@@ -1064,31 +1080,29 @@
   document.getElementById("tier-export-btn").addEventListener("click", (e) => {
     copyToClipboard(formatTierPathsFile(TIER_PATHS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
   });
-  document.getElementById("box-toggle-btn").addEventListener("click", () => toggleBoxDraw());
-  document.getElementById("box-cancel-btn").addEventListener("click", () => {
-    boxCorner1 = null;
-    boxCorner2 = null;
-    clearBoxPreview();
-    updateBoxStatus();
+  document.getElementById("area-toggle-btn").addEventListener("click", () => toggleAreaDraw());
+  document.getElementById("area-undo-btn").addEventListener("click", () => {
+    currentAreaPoints.pop();
+    updateAreaPreview();
+    updateAreaStatus();
   });
-  document.querySelectorAll(".box-tag-btn").forEach(btn => {
+  document.getElementById("area-cancel-btn").addEventListener("click", () => {
+    currentAreaPoints = [];
+    clearAreaPreview();
+    updateAreaStatus();
+  });
+  document.querySelectorAll(".area-tag-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      if (!boxCorner1 || !boxCorner2) return;
-      const x1 = Math.min(boxCorner1[0], boxCorner2[0]);
-      const y1 = Math.min(boxCorner1[1], boxCorner2[1]);
-      const x2 = Math.max(boxCorner1[0], boxCorner2[0]);
-      const y2 = Math.max(boxCorner1[1], boxCorner2[1]);
-      if (x2 - x1 < 4 || y2 - y1 < 4) return;
-      BOUNDARY_BOXES.push({ tier: btn.dataset.tier, layer: currentLayerId, x1, y1, x2, y2 });
-      boxCorner1 = null;
-      boxCorner2 = null;
-      clearBoxPreview();
-      updateBoxStatus();
-      renderBoundaryBoxes();
+      if (currentAreaPoints.length < 3) return;
+      BOUNDARY_AREAS.push({ tier: btn.dataset.tier, layer: currentLayerId, points: currentAreaPoints.slice() });
+      currentAreaPoints = [];
+      clearAreaPreview();
+      updateAreaStatus();
+      renderBoundaryAreas();
     });
   });
-  document.getElementById("box-export-btn").addEventListener("click", (e) => {
-    copyToClipboard(formatBoundaryBoxesFile(BOUNDARY_BOXES), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
+  document.getElementById("area-export-btn").addEventListener("click", (e) => {
+    copyToClipboard(formatBoundaryAreasFile(BOUNDARY_AREAS), (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
   });
   document.getElementById("search-box").addEventListener("input", (e) => runSearch(e.target.value));
   document.getElementById("search-box").addEventListener("focus", (e) => runSearch(e.target.value));
@@ -1184,7 +1198,7 @@
   renderAmenityPalette();
   updateTagStatus();
   updateTraceStatus();
-  updateBoxStatus();
+  updateAreaStatus();
   renderDevPoints();
   makeDraggable(document.getElementById("control-box"), document.getElementById("control-box-header"), "controlBoxPosition");
   makeDraggable(document.getElementById("zone-tier-panel"), document.getElementById("zone-tier-header"), "zoneTierPanelPosition");
