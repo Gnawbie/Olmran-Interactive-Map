@@ -737,11 +737,48 @@
     return true;
   }
 
-  // ---- Search ----
+  // ---- Search (typo-tolerant: exact substrings rank first, then fuzzy) ----
   function searchIndex() {
     const zoneEntries = ZONES.map(z => ({ ...z, kind: "zone" }));
     const markerEntries = MARKERS.map(m => ({ ...m, kind: "marker" }));
     return zoneEntries.concat(markerEntries);
+  }
+
+  function levenshtein(a, b) {
+    const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+    for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        dp[i][j] = a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+    return dp[a.length][b.length];
+  }
+
+  // 0 = exact substring match. Otherwise, the smallest edit distance between
+  // the query and any similarly-sized window of the name — lets a typo like
+  // "feild of sorow" still find "Field of Sorrow" instead of showing nothing.
+  function fuzzyScore(query, name) {
+    if (name.includes(query)) return 0;
+    let best = Infinity;
+    const qLen = query.length;
+    const minWin = Math.max(1, qLen - 2);
+    const maxWin = Math.min(name.length, qLen + 2);
+    for (let winLen = minWin; winLen <= maxWin; winLen++) {
+      for (let start = 0; start <= name.length - winLen; start++) {
+        const d = levenshtein(query, name.substr(start, winLen));
+        if (d < best) best = d;
+        if (best === 1) return best; // can't do better than 1 once we're not exact
+      }
+    }
+    return best;
+  }
+
+  function fuzzyThreshold(queryLength) {
+    return Math.max(1, Math.floor(queryLength * 0.25));
   }
 
   function runSearch(query) {
@@ -752,9 +789,13 @@
       resultsEl.classList.remove("visible");
       return;
     }
+    const threshold = fuzzyThreshold(q.length);
     const matches = searchIndex()
-      .filter(item => item.name.toLowerCase().includes(q))
-      .slice(0, 25);
+      .map(item => ({ item, score: fuzzyScore(q, item.name.toLowerCase()) }))
+      .filter(m => m.score <= threshold)
+      .sort((a, b) => a.score - b.score || a.item.name.length - b.item.name.length)
+      .slice(0, 25)
+      .map(m => m.item);
 
     if (matches.length === 0) {
       resultsEl.classList.remove("visible");
