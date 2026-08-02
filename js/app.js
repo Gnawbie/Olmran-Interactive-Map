@@ -230,16 +230,18 @@
           content.appendChild(hint);
         }
 
-        const removeBtn = document.createElement("button");
-        removeBtn.textContent = "Remove";
-        removeBtn.className = "amenity-point-remove";
-        removeBtn.addEventListener("click", () => {
-          const idx = AMENITY_POINTS.indexOf(p);
-          if (idx !== -1) AMENITY_POINTS.splice(idx, 1);
-          renderAmenityBadges();
-          updateTagStatus();
-        });
-        content.appendChild(removeBtn);
+        if (devSession) {
+          const removeBtn = document.createElement("button");
+          removeBtn.textContent = "Remove";
+          removeBtn.className = "amenity-point-remove";
+          removeBtn.addEventListener("click", () => {
+            const idx = AMENITY_POINTS.indexOf(p);
+            if (idx !== -1) AMENITY_POINTS.splice(idx, 1);
+            renderAmenityBadges();
+            updateTagStatus();
+          });
+          content.appendChild(removeBtn);
+        }
 
         marker.on("dragend", () => {
           const raw = latLngToXY(marker.getLatLng());
@@ -433,16 +435,18 @@
         content.className = "map-popup";
         const label = p.tier.charAt(0).toUpperCase() + p.tier.slice(1);
         content.innerHTML = `<h3>${label} Tier Path</h3><p>${p.points.length} points</p>`;
-        const removeBtn = document.createElement("button");
-        removeBtn.textContent = "Remove";
-        removeBtn.className = "amenity-point-remove";
-        removeBtn.addEventListener("click", () => {
-          const idx = TIER_PATHS.indexOf(p);
-          if (idx !== -1) TIER_PATHS.splice(idx, 1);
-          renderTierPaths();
-          updateTraceStatus();
-        });
-        content.appendChild(removeBtn);
+        if (devSession) {
+          const removeBtn = document.createElement("button");
+          removeBtn.textContent = "Remove";
+          removeBtn.className = "amenity-point-remove";
+          removeBtn.addEventListener("click", () => {
+            const idx = TIER_PATHS.indexOf(p);
+            if (idx !== -1) TIER_PATHS.splice(idx, 1);
+            renderTierPaths();
+            updateTraceStatus();
+          });
+          content.appendChild(removeBtn);
+        }
         line.bindPopup(content);
         tierPathLayerGroup.addLayer(line);
       });
@@ -597,16 +601,18 @@
         content.className = "map-popup";
         const label = area.tier.charAt(0).toUpperCase() + area.tier.slice(1);
         content.innerHTML = `<h3>${label} Area</h3><p>${area.points.length} points</p>`;
-        const removeBtn = document.createElement("button");
-        removeBtn.textContent = "Remove";
-        removeBtn.className = "amenity-point-remove";
-        removeBtn.addEventListener("click", () => {
-          const idx = BOUNDARY_AREAS.indexOf(area);
-          if (idx !== -1) BOUNDARY_AREAS.splice(idx, 1);
-          renderBoundaryAreas();
-          updateAreaStatus();
-        });
-        content.appendChild(removeBtn);
+        if (devSession) {
+          const removeBtn = document.createElement("button");
+          removeBtn.textContent = "Remove";
+          removeBtn.className = "amenity-point-remove";
+          removeBtn.addEventListener("click", () => {
+            const idx = BOUNDARY_AREAS.indexOf(area);
+            if (idx !== -1) BOUNDARY_AREAS.splice(idx, 1);
+            renderBoundaryAreas();
+            updateAreaStatus();
+          });
+          content.appendChild(removeBtn);
+        }
         overlay.bindPopup(content);
         boundaryAreaLayerGroup.addLayer(overlay);
       } catch (e) {
@@ -699,16 +705,18 @@
       p.textContent = `${area.points.length} points`;
       content.appendChild(h3);
       content.appendChild(p);
-      const removeBtn = document.createElement("button");
-      removeBtn.textContent = "Remove";
-      removeBtn.className = "amenity-point-remove";
-      removeBtn.addEventListener("click", () => {
-        const idx = GREY_AREAS.indexOf(area);
-        if (idx !== -1) GREY_AREAS.splice(idx, 1);
-        renderGreyAreas();
-        updateGreyAreaStatus();
-      });
-      content.appendChild(removeBtn);
+      if (devSession) {
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "Remove";
+        removeBtn.className = "amenity-point-remove";
+        removeBtn.addEventListener("click", () => {
+          const idx = GREY_AREAS.indexOf(area);
+          if (idx !== -1) GREY_AREAS.splice(idx, 1);
+          renderGreyAreas();
+          updateGreyAreaStatus();
+        });
+        content.appendChild(removeBtn);
+      }
       polygon.bindPopup(content);
       greyAreaLayerGroup.addLayer(polygon);
     });
@@ -793,16 +801,18 @@
       p.textContent = `${line.points.length} points`;
       content.appendChild(h3);
       content.appendChild(p);
-      const removeBtn = document.createElement("button");
-      removeBtn.textContent = "Remove";
-      removeBtn.className = "amenity-point-remove";
-      removeBtn.addEventListener("click", () => {
-        const idx = LINE_PATHS.indexOf(line);
-        if (idx !== -1) LINE_PATHS.splice(idx, 1);
-        renderLinePaths();
-        updateLineStatus();
-      });
-      content.appendChild(removeBtn);
+      if (devSession) {
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "Remove";
+        removeBtn.className = "amenity-point-remove";
+        removeBtn.addEventListener("click", () => {
+          const idx = LINE_PATHS.indexOf(line);
+          if (idx !== -1) LINE_PATHS.splice(idx, 1);
+          renderLinePaths();
+          updateLineStatus();
+        });
+        content.appendChild(removeBtn);
+      }
       polyline.bindPopup(content);
       lineLayerGroup.addLayer(polyline);
     });
@@ -968,7 +978,9 @@
           label.x = x;
           label.y = y;
         });
-        marker.bindPopup(buildTextLabelPopup(label, marker));
+        if (devSession) {
+          marker.bindPopup(buildTextLabelPopup(label, marker));
+        }
         textLabelLayerGroup.addLayer(marker);
       });
     textLabelLayerGroup.addTo(map);
@@ -1653,6 +1665,11 @@
       toggleTextPlacement(false);
     }
     renderAmenityBadges();
+    renderBoundaryAreas();
+    renderGreyAreas();
+    renderLinePaths();
+    renderTierPaths();
+    renderTextLabels();
   }
 
   function toggleLoginOverlay(show) {
