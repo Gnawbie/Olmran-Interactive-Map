@@ -87,7 +87,12 @@
   function gridLayoutFor(realm) {
     const pieces = REALM_PIECES[realm] || [];
     const cols = Math.ceil(Math.sqrt(pieces.length));
-    const cellW = 1400, cellH = 1400;
+    // Size cells to the largest piece in this realm (+ padding) so nothing
+    // overlaps in the starting scatter, no matter how big an individual
+    // piece is -- pieces range up to ~1900x2800px.
+    const maxW = pieces.reduce((m, p) => Math.max(m, p.width), 0);
+    const maxH = pieces.reduce((m, p) => Math.max(m, p.height), 0);
+    const cellW = maxW + 200, cellH = maxH + 200;
     const layout = {};
     pieces.forEach((p, i) => {
       const col = i % cols;
@@ -209,9 +214,13 @@
 
     map = L.map("map", {
       crs: L.CRS.Simple,
-      minZoom: -6,
-      maxZoom: 2,
-      zoomSnap: 0.25,
+      // Effectively unbounded in both directions -- these room-grid pieces
+      // get arranged edge-to-edge into a full realm map, which can end up
+      // far larger than any fixed zoom floor would comfortably show.
+      minZoom: -20,
+      maxZoom: 10,
+      zoomSnap: 0.1,
+      wheelPxPerZoomLevel: 90,
       attributionControl: false
     });
     map.setView([0, 0], -3);
@@ -247,6 +256,12 @@
     document.getElementById("export-btn").addEventListener("click", (e) => {
       const text = formatLayoutFileAllRealms();
       copyToClipboard(text, (ok) => flashButton(e.target, ok ? "Copied!" : "Copy failed"));
+    });
+
+    document.getElementById("fit-all-btn").addEventListener("click", () => {
+      if (pieceLayerGroup.getLayers().length > 0) {
+        map.fitBounds(pieceLayerGroup.getBounds(), { padding: [80, 80] });
+      }
     });
 
     renderRealm(currentRealm);
