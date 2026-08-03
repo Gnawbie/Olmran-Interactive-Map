@@ -189,7 +189,7 @@
     endActiveDrag();
 
     const pieces = REALM_PIECES[realm] || [];
-    const saved = layoutOverride || loadLayoutFromStorage(realm) || {};
+    const saved = layoutOverride || loadLayoutFromStorage(realm) || REALM_SEED_LAYOUT[realm] || {};
     const grid = gridLayoutFor(realm);
 
     pieces.forEach(piece => {
