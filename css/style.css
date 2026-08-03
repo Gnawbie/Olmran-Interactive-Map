@@ -668,6 +668,22 @@ html, body {
   font-size: 12px;
 }
 
+#dev-header a {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #5c4a2a;
+  background: #3a2e17;
+  color: #f0c987;
+  cursor: pointer;
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+#dev-header a:hover {
+  background: #4a3a1e;
+}
+
 #dev-recenter-row {
   display: flex;
   align-items: center;

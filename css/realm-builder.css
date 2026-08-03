@@ -1,0 +1,189 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #0e1015;
+  color: #f0ead9;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.hidden { display: none !important; }
+
+/* ---- Login gate ---- */
+#login-gate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0e1015;
+  z-index: 10;
+}
+
+#login-gate-modal {
+  width: 300px;
+  padding: 20px;
+  background: #181b22;
+  border: 1px solid #3a3f4b;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+#login-gate-modal h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.login-gate-note {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: #8ea0d0;
+}
+
+#login-gate-modal label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #8ea0d0;
+  margin: 10px 0 4px;
+}
+
+#login-gate-modal input {
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0f0f0;
+  font-size: 13px;
+}
+
+#rb-login-error {
+  min-height: 16px;
+  font-size: 12px;
+  color: #e88;
+  margin-top: 8px;
+}
+
+#login-gate-modal button {
+  width: 100%;
+  margin-top: 14px;
+  padding: 9px;
+  border-radius: 6px;
+  border: none;
+  background: #2b6fd9;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* ---- Builder toolbar ---- */
+#builder-app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #181b22;
+  border-bottom: 1px solid #3a3f4b;
+  flex-wrap: wrap;
+}
+
+#title {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+  margin-right: 8px;
+}
+
+#realm-select {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0f0f0;
+  font-size: 13px;
+}
+
+#toolbar button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0ead9;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+#toolbar button:hover { background: #2a2f3a; }
+
+#complete-btn {
+  border-color: #4ade56;
+  color: #4ade56;
+}
+
+#builder-status {
+  font-size: 12px;
+  color: #8ea0d0;
+  flex: 1;
+  min-width: 160px;
+}
+
+#back-link {
+  font-size: 12px;
+  color: #8ea0d0;
+  text-decoration: none;
+  border: 1px solid #444a58;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+#back-link:hover { background: #2a2f3a; }
+
+/* ---- Map canvas ---- */
+#map {
+  flex: 1;
+  background-color: #24262c;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 100px 100px;
+}
+
+/* ---- Draggable piece markers ---- */
+.realm-piece {
+  position: relative;
+  cursor: move;
+}
+
+.realm-piece img {
+  display: block;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.6), 0 4px 14px rgba(0,0,0,0.5);
+}
+
+.realm-piece-label {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  background: rgba(14,16,21,0.9);
+  color: #f0ead9;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.leaflet-marker-icon.leaflet-marker-draggable .realm-piece {
+  cursor: grab;
+}

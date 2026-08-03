@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Realm Builder — Land of Olmran</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="css/realm-builder.css?v=1">
+</head>
+<body>
+
+<div id="login-gate">
+  <div id="login-gate-modal">
+    <h3>Realm Builder</h3>
+    <p class="login-gate-note">Dev login required — this tool edits raw map-assembly data.</p>
+    <label for="rb-username">Username</label>
+    <input id="rb-username" type="text" autocomplete="username">
+    <label for="rb-password">Password</label>
+    <input id="rb-password" type="password" autocomplete="current-password">
+    <div id="rb-login-error"></div>
+    <button id="rb-login-submit">Log In</button>
+  </div>
+</div>
+
+<div id="builder-app" class="hidden">
+  <div id="toolbar">
+    <div id="title">Realm Builder</div>
+    <select id="realm-select">
+      <option value="kaid">Kaid</option>
+      <option value="evil">Evil</option>
+      <option value="good">Good</option>
+      <option value="chaos">Chaos</option>
+    </select>
+    <button id="save-btn" title="Save current piece positions to this browser">Save</button>
+    <button id="load-btn" title="Load the last save for this realm">Load</button>
+    <button id="complete-btn" title="Mark this realm's layout as finished">Complete</button>
+    <button id="export-btn" title="Copy layout data for all realms as JS">Copy Layout Data</button>
+    <span id="builder-status"></span>
+    <a id="back-link" href="index.html">Back to Map</a>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="js/data/dev-accounts.js?v=1"></script>
+<script src="js/data/realm-pieces.js?v=1"></script>
+<script src="js/realm-builder.js?v=1"></script>
+</body>
+</html>
