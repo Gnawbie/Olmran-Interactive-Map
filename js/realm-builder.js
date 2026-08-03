@@ -82,7 +82,8 @@
   let map = null;
   let pieceLayerGroup = null;
   let currentRealm = "kaid";
-  let markersByFile = {};
+  let overlaysByFile = {};
+  let activeDrag = null;
 
   function gridLayoutFor(realm) {
     const pieces = REALM_PIECES[realm] || [];
@@ -115,23 +116,34 @@
     localStorage.setItem("realmBuilderLayout_" + realm, JSON.stringify(layout));
   }
 
+  // Bounds/positions are read from each piece's own L.imageOverlay (which
+  // scales with zoom like the main site's map images do) rather than a
+  // marker -- markers/divIcons in Leaflet are ALWAYS a fixed on-screen
+  // size regardless of zoom (that's why badges/pins never grow or shrink),
+  // which is exactly wrong for pieces meant to tile into one big map: they
+  // need to shrink as you zoom out, like real map content, not stay at
+  // native pixel size forever.
   function currentLayout() {
     const layout = {};
-    Object.entries(markersByFile).forEach(([file, marker]) => {
-      const latlng = marker.getLatLng();
-      layout[file] = { x: Math.round(latlng.lng), y: Math.round(-latlng.lat) };
+    Object.entries(overlaysByFile).forEach(([file, entry]) => {
+      const nw = entry.overlay.getBounds().getNorthWest();
+      layout[file] = { x: Math.round(nw.lng), y: Math.round(-nw.lat) };
     });
     return layout;
   }
 
-  function pieceIcon(file, piece) {
+  function boundsForPiece(pos, piece) {
+    return L.latLngBounds(
+      [-(pos.y + piece.height), pos.x],
+      [-pos.y, pos.x + piece.width]
+    );
+  }
+
+  function labelIcon(file) {
     return L.divIcon({
       className: "",
-      html: `<div class="realm-piece">` +
-        `<div class="realm-piece-label">${escapeHtml(file.replace(/\.png$/i, ""))}</div>` +
-        `<img src="pieces/${currentRealm}/${encodeURIComponent(file)}" width="${piece.width}" height="${piece.height}">` +
-        `</div>`,
-      iconSize: [piece.width, piece.height],
+      html: `<div class="realm-piece-label">${escapeHtml(file.replace(/\.png$/i, ""))}</div>`,
+      iconSize: [0, 0],
       iconAnchor: [0, 0]
     });
   }
@@ -142,10 +154,39 @@
     return div.innerHTML;
   }
 
+  // One shared drag tracker for all pieces (rather than a listener per
+  // piece) -- mousedown on a piece's image arms it, map-level mousemove
+  // drags it, mouseup/mouseleave releases it.
+  function attachDragHandlers(overlay, label) {
+    const el = overlay.getElement();
+    if (!el) return;
+    el.classList.add("realm-piece-img");
+    el.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      activeDrag = {
+        overlay,
+        label,
+        startLatLng: map.mouseEventToLatLng(e),
+        startBounds: overlay.getBounds()
+      };
+      map.dragging.disable();
+      el.classList.add("dragging");
+    });
+  }
+
+  function endActiveDrag() {
+    if (!activeDrag) return;
+    const el = activeDrag.overlay.getElement();
+    if (el) el.classList.remove("dragging");
+    activeDrag = null;
+    map.dragging.enable();
+  }
+
   function renderRealm(realm, layoutOverride) {
     currentRealm = realm;
     pieceLayerGroup.clearLayers();
-    markersByFile = {};
+    overlaysByFile = {};
+    endActiveDrag();
 
     const pieces = REALM_PIECES[realm] || [];
     const saved = layoutOverride || loadLayoutFromStorage(realm) || {};
@@ -153,16 +194,20 @@
 
     pieces.forEach(piece => {
       const pos = saved[piece.file] || grid[piece.file] || { x: 0, y: 0 };
-      const marker = L.marker([-pos.y, pos.x], {
-        icon: pieceIcon(piece.file, piece),
-        draggable: true
-      });
-      pieceLayerGroup.addLayer(marker);
-      markersByFile[piece.file] = marker;
+      const bounds = boundsForPiece(pos, piece);
+
+      const overlay = L.imageOverlay(`pieces/${realm}/${encodeURIComponent(piece.file)}`, bounds, { interactive: true });
+      pieceLayerGroup.addLayer(overlay);
+
+      const label = L.marker(bounds.getNorthWest(), { icon: labelIcon(piece.file), interactive: false });
+      pieceLayerGroup.addLayer(label);
+
+      attachDragHandlers(overlay, label);
+      overlaysByFile[piece.file] = { overlay, label };
     });
 
     if (pieceLayerGroup.getLayers().length > 0) {
-      map.fitBounds(pieceLayerGroup.getBounds(), { padding: [80, 80] });
+      map.fitBounds(pieceLayerGroup.getBounds(), { padding: [80, 80], animate: false });
     }
 
     updateStatus(`${pieces.length} pieces loaded for ${realm}.`);
@@ -219,13 +264,32 @@
       // far larger than any fixed zoom floor would comfortably show.
       minZoom: -20,
       maxZoom: 10,
-      zoomSnap: 0.1,
-      wheelPxPerZoomLevel: 90,
+      // zoomDelta controls how far each scroll-notch/+-click actually
+      // moves (kept at a full level so reaching -20 takes ~17 steps, not
+      // ~170); zoomSnap only rounds the final resting zoom for crisp
+      // rendering, matching the main site's already-proven feel.
+      zoomSnap: 0.25,
+      zoomDelta: 1,
       attributionControl: false
     });
     map.setView([0, 0], -3);
 
     pieceLayerGroup = L.featureGroup().addTo(map);
+
+    map.on("mousemove", (e) => {
+      if (!activeDrag) return;
+      const dx = e.latlng.lng - activeDrag.startLatLng.lng;
+      const dy = e.latlng.lat - activeDrag.startLatLng.lat;
+      const b = activeDrag.startBounds;
+      const newBounds = L.latLngBounds(
+        [b.getSouth() + dy, b.getWest() + dx],
+        [b.getNorth() + dy, b.getEast() + dx]
+      );
+      activeDrag.overlay.setBounds(newBounds);
+      activeDrag.label.setLatLng(newBounds.getNorthWest());
+    });
+    map.on("mouseup", endActiveDrag);
+    map.getContainer().addEventListener("mouseleave", endActiveDrag);
 
     document.getElementById("realm-select").addEventListener("change", (e) => {
       renderRealm(e.target.value);
@@ -233,7 +297,7 @@
 
     document.getElementById("save-btn").addEventListener("click", () => {
       saveLayoutToStorage(currentRealm, currentLayout());
-      updateStatus(`Saved ${Object.keys(markersByFile).length} piece positions for ${currentRealm}.`);
+      updateStatus(`Saved ${Object.keys(overlaysByFile).length} piece positions for ${currentRealm}.`);
     });
 
     document.getElementById("load-btn").addEventListener("click", () => {
@@ -260,7 +324,7 @@
 
     document.getElementById("fit-all-btn").addEventListener("click", () => {
       if (pieceLayerGroup.getLayers().length > 0) {
-        map.fitBounds(pieceLayerGroup.getBounds(), { padding: [80, 80] });
+        map.fitBounds(pieceLayerGroup.getBounds(), { padding: [80, 80], animate: false });
       }
     });
 

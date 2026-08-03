@@ -158,22 +158,23 @@ html, body {
   background-size: 100px 100px;
 }
 
-/* ---- Draggable piece markers ---- */
-.realm-piece {
-  position: relative;
-  cursor: move;
-}
-
-.realm-piece img {
-  display: block;
-  pointer-events: none;
+/* ---- Draggable piece images ----
+   Pieces are L.imageOverlay (scales with zoom, like the base map images do)
+   with custom drag handling wired in JS -- Leaflet markers/divIcons are
+   always a fixed on-screen size regardless of zoom, which is wrong for
+   content meant to tile into one big map. */
+.realm-piece-img {
+  cursor: grab;
   box-shadow: 0 0 0 2px rgba(0,0,0,0.6), 0 4px 14px rgba(0,0,0,0.5);
 }
 
+.realm-piece-img.dragging {
+  cursor: grabbing;
+  box-shadow: 0 0 0 3px #ffd76c, 0 6px 20px rgba(0,0,0,0.6);
+}
+
 .realm-piece-label {
-  position: absolute;
-  top: -22px;
-  left: 0;
+  transform: translateY(-100%);
   background: rgba(14,16,21,0.9);
   color: #f0ead9;
   font-size: 11px;
@@ -182,8 +183,4 @@ html, body {
   border-radius: 4px;
   white-space: nowrap;
   pointer-events: none;
-}
-
-.leaflet-marker-icon.leaflet-marker-draggable .realm-piece {
-  cursor: grab;
 }
