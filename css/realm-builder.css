@@ -305,16 +305,6 @@ html, body {
   margin-left: auto;
 }
 
-#split-erase-controls,
-#split-manual-controls {
-  display: contents;
-}
-
-#split-add-manual-btn {
-  border-color: #ffd76c;
-  color: #ffd76c;
-}
-
 #split-results {
   margin-top: 14px;
   border-top: 1px solid #3a3f4b;

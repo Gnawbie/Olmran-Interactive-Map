@@ -246,9 +246,6 @@
     const s = splitState;
     s.displayCtx.clearRect(0, 0, s.displayCanvas.width, s.displayCanvas.height);
     s.displayCtx.drawImage(s.fullCanvas, 0, 0, s.displayCanvas.width, s.displayCanvas.height);
-    if (s.selectionCanvas) {
-      s.displayCtx.drawImage(s.selectionCanvas, 0, 0, s.displayCanvas.width, s.displayCanvas.height);
-    }
   }
 
   function openSplitModal(realm, file) {
@@ -264,15 +261,6 @@
       const fullCtx = fullCanvas.getContext("2d");
       fullCtx.drawImage(img, 0, 0);
 
-      // Manual-select paints here (never touches fullCanvas directly) so
-      // the selection can be shown as a tinted overlay and cleared without
-      // affecting the working image.
-      const selectionCanvas = document.createElement("canvas");
-      selectionCanvas.width = natW;
-      selectionCanvas.height = natH;
-      const selectionCtx = selectionCanvas.getContext("2d");
-      selectionCtx.fillStyle = "rgba(255, 215, 108, 0.55)";
-
       const maxW = Math.min(window.innerWidth * 0.86, 900);
       const maxH = Math.min(window.innerHeight * 0.5, 620);
       const scale = Math.min(1, maxW / natW, maxH / natH);
@@ -283,8 +271,8 @@
       const displayCtx = displayCanvas.getContext("2d");
 
       splitState = {
-        realm, file, img, fullCanvas, fullCtx, selectionCanvas, selectionCtx, displayCanvas, displayCtx, scale, natW, natH,
-        drawing: false, undoStack: [],
+        realm, file, img, fullCanvas, fullCtx, displayCanvas, displayCtx, scale, natW, natH,
+        drawing: false, moved: false, mouseDownPoint: null, undoStack: [],
         brushSize: parseInt(document.getElementById("split-brush-size").value, 10),
         groups: null, nextGroupId: 1, dragSourceGroupId: null
       };
@@ -295,9 +283,6 @@
       document.getElementById("split-final").classList.add("hidden");
       document.getElementById("split-results").classList.add("hidden");
       document.getElementById("split-groups-grid").innerHTML = "";
-      document.getElementById("split-manual-mode").checked = false;
-      document.getElementById("split-erase-controls").classList.remove("hidden");
-      document.getElementById("split-manual-controls").classList.add("hidden");
       // Default noise floor scales with image area -- a fixed pixel count
       // either floods text-heavy pieces with individual letter fragments or
       // discards real content on small pieces. Editable since it's a guess.
@@ -572,95 +557,97 @@
     renderGroupsGrid();
   }
 
-  // ---- Manual select ----
-  // An alternative to cut-then-analyze for when auto-detection is the wrong
-  // tool (too many/too few regions, or it's just faster to point at what you
-  // want): paint directly over the piece you want, click "Add Selection as
-  // Piece", repeat. No flood fill involved at all.
-  function paintSelectionAt(x, y, radius) {
-    const ctx = splitState.selectionCtx;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  function paintSelectionStroke(x0, y0, x1, y1, radius) {
-    const dist = Math.hypot(x1 - x0, y1 - y0);
-    const steps = Math.max(1, Math.ceil(dist / Math.max(2, radius / 2)));
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      paintSelectionAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, radius);
-    }
-  }
-
-  function clearManualSelection() {
+  // ---- Click to grab ----
+  // A plain click (mousedown+mouseup with no drag in between) on a piece of
+  // content flood-fills from that exact point -- just that one connected
+  // region, not a full scan of the whole image for every region the way
+  // Analyze Regions does -- crops it, erases it from the working canvas so
+  // it can't be grabbed twice, and adds it as a piece immediately. Draw a
+  // dividing line first (same drag-to-erase as always) to split a region in
+  // two, then click each side to grab it. No analysis step involved.
+  function floodFillSelectAt(startX, startY) {
     const s = splitState;
-    if (!s) return;
-    s.selectionCtx.clearRect(0, 0, s.natW, s.natH);
-    redrawSplitDisplay();
-  }
+    const w = s.natW, h = s.natH;
+    const sx = Math.round(startX), sy = Math.round(startY);
+    if (sx < 0 || sy < 0 || sx >= w || sy >= h) return null;
 
-  function addManualSelectionAsPiece() {
-    const s = splitState;
-    if (!s) return;
+    const imageData = s.fullCtx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    const startIdx = sy * w + sx;
+    if (data[startIdx * 4 + 3] < 10) return null; // clicked empty background
 
-    const selData = s.selectionCtx.getImageData(0, 0, s.natW, s.natH);
-    const fullData = s.fullCtx.getImageData(0, 0, s.natW, s.natH);
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
-    for (let y = 0; y < s.natH; y++) {
-      for (let x = 0; x < s.natW; x++) {
-        const idx = y * s.natW + x;
-        if (selData.data[idx * 4 + 3] <= 10 || fullData.data[idx * 4 + 3] <= 10) continue;
-        any = true;
-        if (x < minX) minX = x; if (x > maxX) maxX = x;
-        if (y < minY) minY = y; if (y > maxY) maxY = y;
+    const visited = new Uint8Array(w * h);
+    const stackX = new Int32Array(w * h);
+    const stackY = new Int32Array(w * h);
+    let sp = 0;
+    stackX[sp] = sx; stackY[sp] = sy; sp++;
+    visited[startIdx] = 1;
+    let minX = sx, maxX = sx, minY = sy, maxY = sy;
+
+    while (sp > 0) {
+      sp--;
+      const cx = stackX[sp], cy = stackY[sp];
+      if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+      if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+      for (let ny = cy - 1; ny <= cy + 1; ny++) {
+        if (ny < 0 || ny >= h) continue;
+        for (let nx = cx - 1; nx <= cx + 1; nx++) {
+          if (nx < 0 || nx >= w) continue;
+          const nidx = ny * w + nx;
+          if (visited[nidx] || data[nidx * 4 + 3] < 10) continue;
+          visited[nidx] = 1;
+          stackX[sp] = nx; stackY[sp] = ny; sp++;
+        }
       }
-    }
-    if (!any) {
-      updateStatus("Nothing selected yet -- paint over the piece you want first.");
-      return;
     }
 
     const margin = 20;
     const x0 = Math.max(0, minX - margin), y0 = Math.max(0, minY - margin);
-    const x1 = Math.min(s.natW, maxX + margin + 1), y1 = Math.min(s.natH, maxY + margin + 1);
-    const w = x1 - x0, h = y1 - y0;
-    const out = new ImageData(w, h);
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const gx = x0 + x, gy = y0 + y, gidx = gy * s.natW + gx;
-        if (selData.data[gidx * 4 + 3] <= 10 || fullData.data[gidx * 4 + 3] <= 10) continue;
-        const oidx = (y * w + x) * 4;
-        out.data[oidx] = fullData.data[gidx * 4];
-        out.data[oidx + 1] = fullData.data[gidx * 4 + 1];
-        out.data[oidx + 2] = fullData.data[gidx * 4 + 2];
-        out.data[oidx + 3] = fullData.data[gidx * 4 + 3];
+    const x1 = Math.min(w, maxX + margin + 1), y1 = Math.min(h, maxY + margin + 1);
+    const cw = x1 - x0, ch = y1 - y0;
+    const out = new ImageData(cw, ch);
+    for (let y = 0; y < ch; y++) {
+      for (let x = 0; x < cw; x++) {
+        const gidx = (y0 + y) * w + (x0 + x);
+        if (!visited[gidx]) continue;
+        const oidx = (y * cw + x) * 4;
+        out.data[oidx] = data[gidx * 4];
+        out.data[oidx + 1] = data[gidx * 4 + 1];
+        out.data[oidx + 2] = data[gidx * 4 + 2];
+        out.data[oidx + 3] = data[gidx * 4 + 3];
       }
     }
     const canvas = document.createElement("canvas");
-    canvas.width = w; canvas.height = h;
+    canvas.width = cw; canvas.height = ch;
     canvas.getContext("2d").putImageData(out, 0, 0);
 
-    // Claimed pixels come off the working canvas too, so they can't also
-    // get swept up by a later manual selection or an Analyze Regions pass.
-    s.fullCtx.save();
-    s.fullCtx.globalCompositeOperation = "destination-out";
-    s.fullCtx.drawImage(s.selectionCanvas, 0, 0);
-    s.fullCtx.restore();
+    // Claimed pixels come off the working canvas so this exact region can't
+    // be grabbed again (and won't double up if Analyze Regions runs later).
+    for (let i = 0; i < visited.length; i++) {
+      if (visited[i]) data[i * 4 + 3] = 0;
+    }
+    s.fullCtx.putImageData(imageData, 0, 0);
+
+    return { canvas, x0, y0 };
+  }
+
+  function grabRegionAsPiece(x, y) {
+    const s = splitState;
+    if (!s) return;
+    const result = floodFillSelectAt(x, y);
+    if (!result) return;
 
     if (!s.groups) s.groups = [];
     const base = baseNameFor(s.file);
     s.groups.push({
       id: nextGroupId(),
-      canvas, x0, y0,
+      canvas: result.canvas, x0: result.x0, y0: result.y0,
       included: true,
       isTitle: false,
       filename: `${base} (Part ${s.groups.length + 1}).png`
     });
 
-    s.selectionCtx.clearRect(0, 0, s.natW, s.natH);
     redrawSplitDisplay();
-
     document.getElementById("split-final").classList.add("hidden");
     document.getElementById("split-editing-area").classList.remove("hidden");
     document.getElementById("split-results").classList.remove("hidden");
@@ -937,43 +924,44 @@
 
     document.getElementById("split-close-btn").addEventListener("click", closeSplitModal);
 
+    // Dragging erases (cuts rooms apart); a plain click with no drag in
+    // between grabs the whole connected region under the cursor as a piece
+    // immediately (see grabRegionAsPiece) -- the mousedown's own tiny erase
+    // dot gets undone first so a click doesn't leave a stray hole.
     (function initSplitCanvasEvents() {
       const canvas = document.getElementById("split-canvas");
       let last = null;
       canvas.addEventListener("mousedown", (e) => {
         if (!splitState) return;
         e.preventDefault();
-        const manual = document.getElementById("split-manual-mode").checked;
-        if (!manual) {
-          splitState.undoStack.push(splitState.fullCtx.getImageData(0, 0, splitState.natW, splitState.natH));
-        }
+        splitState.undoStack.push(splitState.fullCtx.getImageData(0, 0, splitState.natW, splitState.natH));
         splitState.drawing = true;
+        splitState.moved = false;
         last = splitCanvasPoint(e);
-        if (manual) paintSelectionAt(last[0], last[1], splitState.brushSize);
-        else eraseAt(last[0], last[1], splitState.brushSize);
+        splitState.mouseDownPoint = last;
+        eraseAt(last[0], last[1], splitState.brushSize);
         redrawSplitDisplay();
       });
       canvas.addEventListener("mousemove", (e) => {
         if (!splitState || !splitState.drawing) return;
-        const manual = document.getElementById("split-manual-mode").checked;
         const p = splitCanvasPoint(e);
-        if (manual) paintSelectionStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
-        else eraseStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
+        if (Math.hypot(p[0] - last[0], p[1] - last[1]) > 2) splitState.moved = true;
+        eraseStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
         last = p;
         redrawSplitDisplay();
       });
       window.addEventListener("mouseup", () => {
-        if (splitState) splitState.drawing = false;
+        if (!splitState || !splitState.drawing) return;
+        splitState.drawing = false;
+        if (!splitState.moved) {
+          // it was a click, not a drag -- undo the mousedown's erase dot
+          // and grab the region under the cursor instead
+          splitState.fullCtx.putImageData(splitState.undoStack.pop(), 0, 0);
+          const p = splitState.mouseDownPoint;
+          grabRegionAsPiece(p[0], p[1]);
+        }
       });
     })();
-
-    document.getElementById("split-manual-mode").addEventListener("change", (e) => {
-      document.getElementById("split-erase-controls").classList.toggle("hidden", e.target.checked);
-      document.getElementById("split-manual-controls").classList.toggle("hidden", !e.target.checked);
-    });
-
-    document.getElementById("split-clear-selection-btn").addEventListener("click", clearManualSelection);
-    document.getElementById("split-add-manual-btn").addEventListener("click", addManualSelectionAsPiece);
 
     document.getElementById("split-brush-size").addEventListener("input", (e) => {
       if (splitState) splitState.brushSize = parseInt(e.target.value, 10);
@@ -989,7 +977,6 @@
       if (!splitState) return;
       splitState.fullCtx.clearRect(0, 0, splitState.natW, splitState.natH);
       splitState.fullCtx.drawImage(splitState.img, 0, 0);
-      splitState.selectionCtx.clearRect(0, 0, splitState.natW, splitState.natH);
       splitState.undoStack = [];
       splitState.groups = null;
       document.getElementById("split-results").classList.add("hidden");
