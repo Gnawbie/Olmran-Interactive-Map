@@ -148,13 +148,18 @@ html, body {
 }
 #back-link:hover { background: #2a2f3a; }
 
-/* ---- Map canvas ---- */
+/* ---- Map canvas ----
+   Background color matches PIECE_BACKGROUND_COLOR (js/data/piece-style.js)
+   -- the flat gray every piece image was originally rendered on before it
+   was stripped to transparent -- so the gaps around/between pieces here
+   look the same as they did before the background removal, instead of a
+   dark canvas clashing with the light piece art. */
 #map {
   flex: 1;
-  background-color: #24262c;
+  background-color: #bdbdbd;
   background-image:
-    linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+    linear-gradient(rgba(0,0,0,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.06) 1px, transparent 1px);
   background-size: 100px 100px;
 }
 
