@@ -353,14 +353,31 @@ html, body {
   white-space: nowrap;
 }
 
+#split-results-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+#split-place-btn,
 #split-download-btn {
   padding: 8px 14px;
   border-radius: 6px;
-  border: 1px solid #4ade56;
-  background: #20242e;
-  color: #4ade56;
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
+}
+
+#split-place-btn {
+  border: 1px solid #ffd76c;
+  background: #20242e;
+  color: #ffd76c;
+}
+#split-place-btn:hover { background: #35301f; }
+
+#split-download-btn {
+  border: 1px solid #4ade56;
+  background: #20242e;
+  color: #4ade56;
 }
 #split-download-btn:hover { background: #24352a; }

@@ -85,8 +85,47 @@
   let overlaysByFile = {};
   let activeDrag = null;
 
+  // ---- Split pieces (persisted locally, layered over the real manifest) ----
+  // A split doesn't touch the real files -- it hides the original piece and
+  // adds "virtual" pieces (in-memory PNGs stored as data URLs) in its place,
+  // so the parts can be dragged around immediately in this session. Only a
+  // real file on disk (via "Download Parts", handed off to get committed)
+  // makes a split permanent/shared across browsers.
+  function loadHiddenOriginals(realm) {
+    try {
+      return new Set(JSON.parse(localStorage.getItem("realmBuilderHidden_" + realm) || "[]"));
+    } catch (e) {
+      return new Set();
+    }
+  }
+  function saveHiddenOriginals(realm, set) {
+    localStorage.setItem("realmBuilderHidden_" + realm, JSON.stringify(Array.from(set)));
+  }
+  function loadVirtualPieces(realm) {
+    try {
+      return JSON.parse(localStorage.getItem("realmBuilderVirtual_" + realm) || "{}");
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveVirtualPieces(realm, obj) {
+    try {
+      localStorage.setItem("realmBuilderVirtual_" + realm, JSON.stringify(obj));
+      return true;
+    } catch (e) {
+      return false; // most likely quota exceeded -- data URLs are not small
+    }
+  }
+  function effectivePieces(realm) {
+    const hidden = loadHiddenOriginals(realm);
+    const virtual = loadVirtualPieces(realm);
+    const real = (REALM_PIECES[realm] || []).filter(p => !hidden.has(p.file));
+    const virtualList = Object.entries(virtual).map(([file, v]) => ({ file, width: v.width, height: v.height, isVirtual: true }));
+    return real.concat(virtualList);
+  }
+
   function gridLayoutFor(realm) {
-    const pieces = REALM_PIECES[realm] || [];
+    const pieces = effectivePieces(realm);
     const cols = Math.ceil(Math.sqrt(pieces.length));
     // Size cells to the largest piece in this realm (+ padding) so nothing
     // overlaps in the starting scatter, no matter how big an individual
@@ -187,12 +226,15 @@
   }
 
   // ---- Split-piece tool ----
-  // Lets a dev cut a piece image apart into separate files without leaving
-  // the browser: freehand-erase the lines connecting rooms that should be
-  // independent pieces, then the tool finds each resulting disconnected
-  // blob of pixels and offers it as its own downloadable PNG. Downloaded
-  // files still need to be dropped into pieces/<realm>/ and added to
-  // realm-pieces.js / the seed layout by hand -- this only does the cut.
+  // Lets a dev cut a piece image apart without leaving the browser: freehand-
+  // erase the lines connecting rooms that should be independent pieces, then
+  // the tool finds each resulting disconnected blob of pixels. "Place in Map"
+  // swaps the original for the resulting parts as live, draggable pieces
+  // immediately (see placeSplitPartsLive) -- no file round-trip needed to
+  // start rearranging. "Download Parts" is the separate path for making a
+  // split permanent: those files still need to be dropped into
+  // pieces/<realm>/ and added to realm-pieces.js / the seed layout by hand,
+  // since a static site can't write back to its own repo.
   let splitMode = false;
   let splitState = null;
 
@@ -207,6 +249,9 @@
   }
 
   function openSplitModal(realm, file) {
+    const virtual = loadVirtualPieces(realm);
+    const isVirtual = !!virtual[file];
+
     const img = new Image();
     img.onload = () => {
       const natW = img.naturalWidth, natH = img.naturalHeight;
@@ -242,7 +287,7 @@
       document.getElementById("split-min-size").value = Math.max(150, Math.round(natW * natH * 0.0015));
       document.getElementById("split-modal").classList.remove("hidden");
     };
-    img.src = `pieces/${realm}/${encodeURIComponent(file)}`;
+    img.src = isVirtual ? virtual[file].dataUrl : `pieces/${realm}/${encodeURIComponent(file)}`;
   }
 
   function closeSplitModal() {
@@ -439,13 +484,88 @@
     });
   }
 
+  // Cuts the piece apart RIGHT NOW in this session: the original is hidden,
+  // each kept region becomes its own draggable piece (in-memory data URL,
+  // no real file needed) positioned exactly where its content already was,
+  // so nothing jumps and you can start dragging groups apart immediately.
+  function placeSplitPartsLive() {
+    const s = splitState;
+    if (!s || !s.components) return;
+
+    const origEntry = overlaysByFile[s.file];
+    if (!origEntry) {
+      updateStatus("Couldn't place split -- original piece isn't on the map anymore.");
+      return;
+    }
+    const nw = origEntry.overlay.getBounds().getNorthWest();
+    const origWorldX = Math.round(nw.lng);
+    const origWorldY = Math.round(-nw.lat);
+
+    const titleRadio = document.querySelector(".split-title-radio:checked");
+    const titleId = titleRadio ? parseInt(titleRadio.dataset.id, 10) : 0;
+    let titleCanvas = null;
+    if (titleId) {
+      const titleComp = s.components.find(c => c.id === titleId);
+      if (titleComp) titleCanvas = cropComponent(titleComp, 6);
+    }
+
+    const virtual = loadVirtualPieces(s.realm);
+    const hidden = loadHiddenOriginals(s.realm);
+    const layout = loadLayoutFromStorage(s.realm) || {};
+    const margin = 30;
+    let placedCount = 0;
+
+    document.querySelectorAll(".split-result-row").forEach(row => {
+      const checkbox = row.querySelector(".split-include");
+      if (!checkbox || !checkbox.checked) return;
+      const id = parseInt(checkbox.dataset.id, 10);
+      const comp = s.components.find(c => c.id === id);
+      if (!comp) return;
+      const filenameInput = row.querySelector(".split-filename");
+      let filename = filenameInput.value.trim();
+      if (!filename) return;
+      if (!/\.png$/i.test(filename)) filename += ".png";
+
+      const x0 = Math.max(0, comp.minX - margin);
+      const y0 = Math.max(0, comp.minY - margin);
+      const canvas = cropComponent(comp, margin);
+      if (titleCanvas && titleId !== id) {
+        canvas.getContext("2d").drawImage(titleCanvas, 15, 8);
+      }
+
+      virtual[filename] = { width: canvas.width, height: canvas.height, dataUrl: canvas.toDataURL("image/png") };
+      layout[filename] = { x: origWorldX + x0, y: origWorldY + y0 };
+      placedCount++;
+    });
+
+    // Retire the original -- both as a real/previously-virtual piece and
+    // from the saved layout, so it doesn't also keep rendering underneath.
+    hidden.add(s.file);
+    delete virtual[s.file];
+    delete layout[s.file];
+
+    saveHiddenOriginals(s.realm, hidden);
+    const stored = saveVirtualPieces(s.realm, virtual);
+    saveLayoutToStorage(s.realm, layout);
+
+    closeSplitModal();
+    renderRealm(s.realm, layout);
+
+    if (!stored) {
+      updateStatus(`Placed ${placedCount} parts, but local storage is full so they won't survive a reload -- use "Download Parts" to save them for real.`);
+    } else {
+      updateStatus(`Split into ${placedCount} parts -- drag them into place, then Save as usual.`);
+    }
+  }
+
   function renderRealm(realm, layoutOverride) {
     currentRealm = realm;
     pieceLayerGroup.clearLayers();
     overlaysByFile = {};
     endActiveDrag();
 
-    const pieces = REALM_PIECES[realm] || [];
+    const pieces = effectivePieces(realm);
+    const virtual = loadVirtualPieces(realm);
     const saved = layoutOverride || loadLayoutFromStorage(realm) || REALM_SEED_LAYOUT[realm] || {};
     const grid = gridLayoutFor(realm);
 
@@ -453,7 +573,8 @@
       const pos = saved[piece.file] || grid[piece.file] || { x: 0, y: 0 };
       const bounds = boundsForPiece(pos, piece);
 
-      const overlay = L.imageOverlay(`pieces/${realm}/${encodeURIComponent(piece.file)}`, bounds, { interactive: true });
+      const src = piece.isVirtual ? virtual[piece.file].dataUrl : `pieces/${realm}/${encodeURIComponent(piece.file)}`;
+      const overlay = L.imageOverlay(src, bounds, { interactive: true });
       pieceLayerGroup.addLayer(overlay);
 
       const label = L.marker(bounds.getNorthWest(), { icon: labelIcon(piece.file), interactive: false });
@@ -646,6 +767,7 @@
       }, 20);
     });
 
+    document.getElementById("split-place-btn").addEventListener("click", placeSplitPartsLive);
     document.getElementById("split-download-btn").addEventListener("click", downloadSplitParts);
 
     renderRealm(currentRealm);
