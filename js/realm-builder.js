@@ -248,6 +248,14 @@
     s.displayCtx.drawImage(s.fullCanvas, 0, 0, s.displayCanvas.width, s.displayCanvas.height);
   }
 
+  function undoSplitStroke() {
+    if (!splitState || splitState.undoStack.length === 0) return;
+    const prev = splitState.undoStack.pop();
+    splitState.fullCtx.putImageData(prev.imageData, 0, 0);
+    splitState.cutMask.set(prev.cutMask);
+    redrawSplitDisplay();
+  }
+
   function openSplitModal(realm, file) {
     const virtual = loadVirtualPieces(realm);
     const isVirtual = !!virtual[file];
@@ -278,15 +286,19 @@
       const wrap = document.getElementById("split-canvas-wrap");
       const maxW = Math.max(100, wrap.clientWidth - 4);
       const maxH = Math.max(100, wrap.clientHeight - 4);
-      const scale = Math.min(1, maxW / natW, maxH / natH);
+      // baseScale is "fit" -- 100% on the zoom control. zoom is a multiplier
+      // on top of that, so the canvas can grow past the wrap (which then
+      // scrolls) for a closer look at fine detail.
+      const baseScale = Math.min(1, maxW / natW, maxH / natH);
 
       const displayCanvas = document.getElementById("split-canvas");
-      displayCanvas.width = Math.round(natW * scale);
-      displayCanvas.height = Math.round(natH * scale);
+      displayCanvas.width = Math.round(natW * baseScale);
+      displayCanvas.height = Math.round(natH * baseScale);
       const displayCtx = displayCanvas.getContext("2d");
 
       splitState = {
-        realm, file, img, fullCanvas, fullCtx, displayCanvas, displayCtx, scale, natW, natH,
+        realm, file, img, fullCanvas, fullCtx, displayCanvas, displayCtx,
+        baseScale, scale: baseScale, zoom: 1, natW, natH,
         drawing: false, undoStack: [],
         // Every pixel the brush has touched this editing session, tracked
         // separately from fullCanvas's own transparency -- this is the
@@ -297,9 +309,33 @@
         groups: null, nextGroupId: 1, dragSourceGroupId: null
       };
 
+      document.getElementById("split-zoom-level").textContent = "100%";
       redrawSplitDisplay();
     };
     img.src = isVirtual ? virtual[file].dataUrl : `pieces/${realm}/${encodeURIComponent(file)}`;
+  }
+
+  function applyZoom(newZoom) {
+    const s = splitState;
+    if (!s) return;
+    const wrap = document.getElementById("split-canvas-wrap");
+
+    // Keep whatever's currently centered in view still centered after the
+    // zoom level changes, instead of jumping back to the top-left corner.
+    const oldScale = s.scale;
+    const centerX = (wrap.scrollLeft + wrap.clientWidth / 2) / oldScale;
+    const centerY = (wrap.scrollTop + wrap.clientHeight / 2) / oldScale;
+
+    s.zoom = Math.min(8, Math.max(1, newZoom));
+    s.scale = s.baseScale * s.zoom;
+    s.displayCanvas.width = Math.round(s.natW * s.scale);
+    s.displayCanvas.height = Math.round(s.natH * s.scale);
+    redrawSplitDisplay();
+
+    wrap.scrollLeft = centerX * s.scale - wrap.clientWidth / 2;
+    wrap.scrollTop = centerY * s.scale - wrap.clientHeight / 2;
+
+    document.getElementById("split-zoom-level").textContent = Math.round(s.zoom * 100) + "%";
   }
 
   function closeSplitModal() {
@@ -1009,12 +1045,21 @@
       if (splitState) splitState.brushSize = parseInt(e.target.value, 10);
     });
 
-    document.getElementById("split-undo-btn").addEventListener("click", () => {
-      if (!splitState || splitState.undoStack.length === 0) return;
-      const prev = splitState.undoStack.pop();
-      splitState.fullCtx.putImageData(prev.imageData, 0, 0);
-      splitState.cutMask.set(prev.cutMask);
-      redrawSplitDisplay();
+    document.getElementById("split-undo-btn").addEventListener("click", undoSplitStroke);
+
+    // Ctrl/Cmd+Z undoes the last stroke while the split modal is open --
+    // but not while typing in one of its own text/number fields (a
+    // filename box, the min-region-size field), where Z should just be a
+    // letter and native undo should behave normally.
+    document.addEventListener("keydown", (e) => {
+      if (!splitState) return;
+      if (document.getElementById("split-modal").classList.contains("hidden")) return;
+      const key = e.key.toLowerCase();
+      if (!(key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey)) return;
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      e.preventDefault();
+      undoSplitStroke();
     });
 
     document.getElementById("split-clear-btn").addEventListener("click", () => {
@@ -1030,6 +1075,16 @@
     });
 
     document.getElementById("split-line-btn").addEventListener("click", splitAlongLine);
+
+    document.getElementById("split-zoom-in-btn").addEventListener("click", () => {
+      if (splitState) applyZoom(splitState.zoom * 1.25);
+    });
+    document.getElementById("split-zoom-out-btn").addEventListener("click", () => {
+      if (splitState) applyZoom(splitState.zoom / 1.25);
+    });
+    document.getElementById("split-zoom-fit-btn").addEventListener("click", () => {
+      if (splitState) applyZoom(1);
+    });
 
     document.getElementById("split-analyze-btn").addEventListener("click", (e) => {
       if (!splitState) return;
