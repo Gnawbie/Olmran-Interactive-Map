@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Realm Builder — Land of Olmran</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/realm-builder.css?v=12">
+<link rel="stylesheet" href="css/realm-builder.css?v=14">
 </head>
 <body>
 
@@ -49,7 +49,7 @@
       <span id="split-piece-name"></span>
       <button id="split-close-btn" title="Close">&times;</button>
     </div>
-    <p id="split-instructions">Drag to erase the lines connecting rooms you want separated. Click (no drag) on a piece to grab it immediately -- no analysis step needed. Analyze Regions is there if you'd rather grab everything at once.</p>
+    <p id="split-instructions">Draw a freeform line all the way from one edge of the piece to another, then click Split Along Line to cut it into two pieces right there. (Analyze Regions is a separate option for grabbing every already-disconnected region at once.)</p>
 
     <div id="split-editing-area">
       <div id="split-canvas-wrap">
@@ -57,9 +57,10 @@
       </div>
       <div id="split-controls">
         <label>Brush size <input type="range" id="split-brush-size" min="4" max="80" value="20"></label>
-        <label>Min region size <input type="number" id="split-min-size" min="50" step="50" style="width:80px"></label>
         <button id="split-undo-btn">Undo Stroke</button>
         <button id="split-clear-btn">Clear Cuts</button>
+        <button id="split-line-btn">Split Along Line</button>
+        <label>Min region size <input type="number" id="split-min-size" min="50" step="50" style="width:80px"></label>
         <button id="split-analyze-btn">Analyze Regions</button>
       </div>
 
@@ -86,9 +87,9 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/data/dev-accounts.js?v=13"></script>
-<script src="js/data/realm-pieces.js?v=13"></script>
-<script src="js/data/realm-seed-layout.js?v=13"></script>
-<script src="js/realm-builder.js?v=13"></script>
+<script src="js/data/dev-accounts.js?v=14"></script>
+<script src="js/data/realm-pieces.js?v=14"></script>
+<script src="js/data/realm-seed-layout.js?v=14"></script>
+<script src="js/realm-builder.js?v=14"></script>
 </body>
 </html>

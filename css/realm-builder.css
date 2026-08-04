@@ -299,6 +299,11 @@ html, body {
   font-size: 12px;
 }
 
+#split-line-btn {
+  border-color: #ffd76c;
+  color: #ffd76c;
+}
+
 #split-analyze-btn {
   border-color: #4ade56;
   color: #4ade56;

@@ -272,7 +272,12 @@
 
       splitState = {
         realm, file, img, fullCanvas, fullCtx, displayCanvas, displayCtx, scale, natW, natH,
-        drawing: false, moved: false, mouseDownPoint: null, undoStack: [],
+        drawing: false, undoStack: [],
+        // Every pixel the brush has touched this editing session, tracked
+        // separately from fullCanvas's own transparency -- this is the
+        // "wall" splitAlongLine() cuts along, distinct from pixels that
+        // were simply always background.
+        cutMask: new Uint8Array(natW * natH),
         brushSize: parseInt(document.getElementById("split-brush-size").value, 10),
         groups: null, nextGroupId: 1, dragSourceGroupId: null
       };
@@ -303,13 +308,26 @@
   }
 
   function eraseAt(x, y, radius) {
-    const ctx = splitState.fullCtx;
+    const s = splitState;
+    const ctx = s.fullCtx;
     ctx.save();
     ctx.globalCompositeOperation = "destination-out";
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+
+    const w = s.natW, h = s.natH, mask = s.cutMask;
+    const cx = Math.round(x), cy = Math.round(y), r = Math.ceil(radius), r2 = radius * radius;
+    const y0 = Math.max(0, cy - r), y1 = Math.min(h - 1, cy + r);
+    const x0 = Math.max(0, cx - r), x1 = Math.min(w - 1, cx + r);
+    for (let py = y0; py <= y1; py++) {
+      const dy = py - cy;
+      for (let px = x0; px <= x1; px++) {
+        const dx = px - cx;
+        if (dx * dx + dy * dy <= r2) mask[py * w + px] = 1;
+      }
+    }
   }
 
   function eraseStroke(x0, y0, x1, y1, radius) {
@@ -557,97 +575,118 @@
     renderGroupsGrid();
   }
 
-  // ---- Click to grab ----
-  // A plain click (mousedown+mouseup with no drag in between) on a piece of
-  // content flood-fills from that exact point -- just that one connected
-  // region, not a full scan of the whole image for every region the way
-  // Analyze Regions does -- crops it, erases it from the working canvas so
-  // it can't be grabbed twice, and adds it as a piece immediately. Draw a
-  // dividing line first (same drag-to-erase as always) to split a region in
-  // two, then click each side to grab it. No analysis step involved.
-  function floodFillSelectAt(startX, startY) {
+  // ---- Split along line ----
+  // Draw one freehand line all the way from one edge of the image to
+  // another (the brush stroke, tracked in cutMask separately from the
+  // image's own transparency), then Split Along Line divides the WHOLE
+  // canvas -- background included, not just connected content -- into
+  // exactly two pieces using that line as the boundary. This is a single
+  // wall-respecting flood fill from a corner, not a scan for every
+  // disconnected blob, so it's cheap regardless of how much text/detail is
+  // on the piece.
+  function splitAlongLine() {
     const s = splitState;
+    if (!s) return;
     const w = s.natW, h = s.natH;
-    const sx = Math.round(startX), sy = Math.round(startY);
-    if (sx < 0 || sy < 0 || sx >= w || sy >= h) return null;
+    const mask = s.cutMask;
 
-    const imageData = s.fullCtx.getImageData(0, 0, w, h);
-    const data = imageData.data;
-    const startIdx = sy * w + sx;
-    if (data[startIdx * 4 + 3] < 10) return null; // clicked empty background
+    // Find an unblocked starting corner -- the line could pass close to one.
+    const corners = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]];
+    let start = null;
+    for (const [cx, cy] of corners) {
+      if (!mask[cy * w + cx]) { start = [cx, cy]; break; }
+    }
+    if (!start) {
+      updateStatus("Can't find a starting point -- the line is too close to every corner.");
+      return;
+    }
 
-    const visited = new Uint8Array(w * h);
+    // 4-connected flood fill (not 8) so a single-pixel-thin diagonal wall
+    // still blocks the fill instead of leaking through the gap between
+    // diagonally-touching pixels.
+    const sideA = new Uint8Array(w * h);
     const stackX = new Int32Array(w * h);
     const stackY = new Int32Array(w * h);
     let sp = 0;
-    stackX[sp] = sx; stackY[sp] = sy; sp++;
-    visited[startIdx] = 1;
-    let minX = sx, maxX = sx, minY = sy, maxY = sy;
-
+    stackX[sp] = start[0]; stackY[sp] = start[1]; sp++;
+    sideA[start[1] * w + start[0]] = 1;
     while (sp > 0) {
       sp--;
       const cx = stackX[sp], cy = stackY[sp];
-      if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
-      if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
-      for (let ny = cy - 1; ny <= cy + 1; ny++) {
-        if (ny < 0 || ny >= h) continue;
-        for (let nx = cx - 1; nx <= cx + 1; nx++) {
-          if (nx < 0 || nx >= w) continue;
-          const nidx = ny * w + nx;
-          if (visited[nidx] || data[nidx * 4 + 3] < 10) continue;
-          visited[nidx] = 1;
-          stackX[sp] = nx; stackY[sp] = ny; sp++;
+      if (cy > 0) { const i = (cy - 1) * w + cx; if (!sideA[i] && !mask[i]) { sideA[i] = 1; stackX[sp] = cx; stackY[sp] = cy - 1; sp++; } }
+      if (cy < h - 1) { const i = (cy + 1) * w + cx; if (!sideA[i] && !mask[i]) { sideA[i] = 1; stackX[sp] = cx; stackY[sp] = cy + 1; sp++; } }
+      if (cx > 0) { const i = cy * w + cx - 1; if (!sideA[i] && !mask[i]) { sideA[i] = 1; stackX[sp] = cx - 1; stackY[sp] = cy; sp++; } }
+      if (cx < w - 1) { const i = cy * w + cx + 1; if (!sideA[i] && !mask[i]) { sideA[i] = 1; stackX[sp] = cx + 1; stackY[sp] = cy; sp++; } }
+    }
+
+    const imageData = s.fullCtx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+
+    function buildSide(inSide) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          if (mask[i] || inSide[i] !== 1) continue;
+          if (data[i * 4 + 3] < 10) continue; // only real content counts for the crop box
+          any = true;
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
         }
       }
-    }
-
-    const margin = 20;
-    const x0 = Math.max(0, minX - margin), y0 = Math.max(0, minY - margin);
-    const x1 = Math.min(w, maxX + margin + 1), y1 = Math.min(h, maxY + margin + 1);
-    const cw = x1 - x0, ch = y1 - y0;
-    const out = new ImageData(cw, ch);
-    for (let y = 0; y < ch; y++) {
-      for (let x = 0; x < cw; x++) {
-        const gidx = (y0 + y) * w + (x0 + x);
-        if (!visited[gidx]) continue;
-        const oidx = (y * cw + x) * 4;
-        out.data[oidx] = data[gidx * 4];
-        out.data[oidx + 1] = data[gidx * 4 + 1];
-        out.data[oidx + 2] = data[gidx * 4 + 2];
-        out.data[oidx + 3] = data[gidx * 4 + 3];
+      if (!any) return null;
+      const margin = 20;
+      const x0 = Math.max(0, minX - margin), y0 = Math.max(0, minY - margin);
+      const x1 = Math.min(w, maxX + margin + 1), y1 = Math.min(h, maxY + margin + 1);
+      const cw = x1 - x0, ch = y1 - y0;
+      const out = new ImageData(cw, ch);
+      for (let y = 0; y < ch; y++) {
+        for (let x = 0; x < cw; x++) {
+          const gidx = (y0 + y) * w + (x0 + x);
+          if (mask[gidx] || inSide[gidx] !== 1) continue;
+          const oidx = (y * cw + x) * 4;
+          out.data[oidx] = data[gidx * 4];
+          out.data[oidx + 1] = data[gidx * 4 + 1];
+          out.data[oidx + 2] = data[gidx * 4 + 2];
+          out.data[oidx + 3] = data[gidx * 4 + 3];
+        }
       }
+      const canvas = document.createElement("canvas");
+      canvas.width = cw; canvas.height = ch;
+      canvas.getContext("2d").putImageData(out, 0, 0);
+      return { canvas, x0, y0 };
     }
-    const canvas = document.createElement("canvas");
-    canvas.width = cw; canvas.height = ch;
-    canvas.getContext("2d").putImageData(out, 0, 0);
 
-    // Claimed pixels come off the working canvas so this exact region can't
-    // be grabbed again (and won't double up if Analyze Regions runs later).
-    for (let i = 0; i < visited.length; i++) {
-      if (visited[i]) data[i * 4 + 3] = 0;
+    const resultA = buildSide(sideA);
+    // Side B is everything not on side A and not on the wall itself.
+    const sideB = new Uint8Array(w * h);
+    for (let i = 0; i < sideA.length; i++) sideB[i] = (!sideA[i] && !mask[i]) ? 1 : 0;
+    const resultB = buildSide(sideB);
+
+    if (!resultA || !resultB) {
+      updateStatus("That line doesn't reach across the piece yet -- draw it all the way from one edge to another.");
+      return;
     }
-    s.fullCtx.putImageData(imageData, 0, 0);
-
-    return { canvas, x0, y0 };
-  }
-
-  function grabRegionAsPiece(x, y) {
-    const s = splitState;
-    if (!s) return;
-    const result = floodFillSelectAt(x, y);
-    if (!result) return;
 
     if (!s.groups) s.groups = [];
     const base = baseNameFor(s.file);
-    s.groups.push({
-      id: nextGroupId(),
-      canvas: result.canvas, x0: result.x0, y0: result.y0,
-      included: true,
-      isTitle: false,
-      filename: `${base} (Part ${s.groups.length + 1}).png`
+    [resultA, resultB].forEach((r, i) => {
+      s.groups.push({
+        id: nextGroupId(),
+        canvas: r.canvas, x0: r.x0, y0: r.y0,
+        included: true,
+        isTitle: false,
+        filename: `${base} (Part ${s.groups.length + 1}).png`
+      });
     });
 
+    // The whole canvas has now been divided into the two pieces above --
+    // nothing meaningful is left to keep cutting on this working copy.
+    s.fullCtx.clearRect(0, 0, w, h);
+    s.cutMask.fill(0);
+    s.undoStack = [];
     redrawSplitDisplay();
+
     document.getElementById("split-final").classList.add("hidden");
     document.getElementById("split-editing-area").classList.remove("hidden");
     document.getElementById("split-results").classList.remove("hidden");
@@ -924,42 +963,30 @@
 
     document.getElementById("split-close-btn").addEventListener("click", closeSplitModal);
 
-    // Dragging erases (cuts rooms apart); a plain click with no drag in
-    // between grabs the whole connected region under the cursor as a piece
-    // immediately (see grabRegionAsPiece) -- the mousedown's own tiny erase
-    // dot gets undone first so a click doesn't leave a stray hole.
     (function initSplitCanvasEvents() {
       const canvas = document.getElementById("split-canvas");
       let last = null;
       canvas.addEventListener("mousedown", (e) => {
         if (!splitState) return;
         e.preventDefault();
-        splitState.undoStack.push(splitState.fullCtx.getImageData(0, 0, splitState.natW, splitState.natH));
+        splitState.undoStack.push({
+          imageData: splitState.fullCtx.getImageData(0, 0, splitState.natW, splitState.natH),
+          cutMask: Uint8Array.from(splitState.cutMask)
+        });
         splitState.drawing = true;
-        splitState.moved = false;
         last = splitCanvasPoint(e);
-        splitState.mouseDownPoint = last;
         eraseAt(last[0], last[1], splitState.brushSize);
         redrawSplitDisplay();
       });
       canvas.addEventListener("mousemove", (e) => {
         if (!splitState || !splitState.drawing) return;
         const p = splitCanvasPoint(e);
-        if (Math.hypot(p[0] - last[0], p[1] - last[1]) > 2) splitState.moved = true;
         eraseStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
         last = p;
         redrawSplitDisplay();
       });
       window.addEventListener("mouseup", () => {
-        if (!splitState || !splitState.drawing) return;
-        splitState.drawing = false;
-        if (!splitState.moved) {
-          // it was a click, not a drag -- undo the mousedown's erase dot
-          // and grab the region under the cursor instead
-          splitState.fullCtx.putImageData(splitState.undoStack.pop(), 0, 0);
-          const p = splitState.mouseDownPoint;
-          grabRegionAsPiece(p[0], p[1]);
-        }
+        if (splitState) splitState.drawing = false;
       });
     })();
 
@@ -969,7 +996,9 @@
 
     document.getElementById("split-undo-btn").addEventListener("click", () => {
       if (!splitState || splitState.undoStack.length === 0) return;
-      splitState.fullCtx.putImageData(splitState.undoStack.pop(), 0, 0);
+      const prev = splitState.undoStack.pop();
+      splitState.fullCtx.putImageData(prev.imageData, 0, 0);
+      splitState.cutMask.set(prev.cutMask);
       redrawSplitDisplay();
     });
 
@@ -977,12 +1006,15 @@
       if (!splitState) return;
       splitState.fullCtx.clearRect(0, 0, splitState.natW, splitState.natH);
       splitState.fullCtx.drawImage(splitState.img, 0, 0);
+      splitState.cutMask.fill(0);
       splitState.undoStack = [];
       splitState.groups = null;
       document.getElementById("split-results").classList.add("hidden");
       document.getElementById("split-groups-grid").innerHTML = "";
       redrawSplitDisplay();
     });
+
+    document.getElementById("split-line-btn").addEventListener("click", splitAlongLine);
 
     document.getElementById("split-analyze-btn").addEventListener("click", (e) => {
       if (!splitState) return;
