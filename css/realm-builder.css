@@ -209,13 +209,31 @@ html, body {
 
 #split-modal-inner {
   width: min(94vw, 1000px);
-  max-height: 92vh;
+  /* A definite height (not just a cap) is what lets flex:1 children below
+     (editing-area -> canvas-wrap) actually grow to fill the leftover space
+     -- max-height alone only bounds content-sized elements, it doesn't give
+     flex-grow anything to distribute. */
+  height: min(92vh, 900px);
   overflow-y: auto;
   background: #181b22;
   border: 1px solid #3a3f4b;
   border-radius: 10px;
   padding: 16px 18px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  /* Column layout so #split-editing-area (and canvas-wrap within it) can
+     flex to fill whatever's actually left after the header/instructions/
+     controls -- the canvas is then sized in JS to that real, measured
+     space, instead of a fixed guess that could be taller than what's
+     visible and get clipped without any obvious way to reach the rest. */
+  display: flex;
+  flex-direction: column;
+}
+
+#split-editing-area {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
 }
 
 #split-modal-header {
@@ -260,6 +278,8 @@ html, body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  flex: 1;
+  min-height: 160px;
 }
 
 #split-canvas {

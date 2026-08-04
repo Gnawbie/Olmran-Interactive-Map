@@ -261,8 +261,23 @@
       const fullCtx = fullCanvas.getContext("2d");
       fullCtx.drawImage(img, 0, 0);
 
-      const maxW = Math.min(window.innerWidth * 0.86, 900);
-      const maxH = Math.min(window.innerHeight * 0.5, 620);
+      // Show the modal (with results/final hidden) BEFORE sizing the canvas,
+      // so #split-canvas-wrap's flex-allocated size reflects the real,
+      // rendered space left after the header/instructions/controls --
+      // guessing a size from raw window dimensions could end up taller than
+      // what's actually visible, clipping the canvas top/bottom with no
+      // indication you needed to scroll to reach them.
+      document.getElementById("split-piece-name").textContent = `${baseNameFor(file)} (${realm})`;
+      document.getElementById("split-editing-area").classList.remove("hidden");
+      document.getElementById("split-final").classList.add("hidden");
+      document.getElementById("split-results").classList.add("hidden");
+      document.getElementById("split-groups-grid").innerHTML = "";
+      document.getElementById("split-min-size").value = Math.max(150, Math.round(natW * natH * 0.0015));
+      document.getElementById("split-modal").classList.remove("hidden");
+
+      const wrap = document.getElementById("split-canvas-wrap");
+      const maxW = Math.max(100, wrap.clientWidth - 4);
+      const maxH = Math.max(100, wrap.clientHeight - 4);
       const scale = Math.min(1, maxW / natW, maxH / natH);
 
       const displayCanvas = document.getElementById("split-canvas");
@@ -283,16 +298,6 @@
       };
 
       redrawSplitDisplay();
-      document.getElementById("split-piece-name").textContent = `${baseNameFor(file)} (${realm})`;
-      document.getElementById("split-editing-area").classList.remove("hidden");
-      document.getElementById("split-final").classList.add("hidden");
-      document.getElementById("split-results").classList.add("hidden");
-      document.getElementById("split-groups-grid").innerHTML = "";
-      // Default noise floor scales with image area -- a fixed pixel count
-      // either floods text-heavy pieces with individual letter fragments or
-      // discards real content on small pieces. Editable since it's a guess.
-      document.getElementById("split-min-size").value = Math.max(150, Math.round(natW * natH * 0.0015));
-      document.getElementById("split-modal").classList.remove("hidden");
     };
     img.src = isVirtual ? virtual[file].dataUrl : `pieces/${realm}/${encodeURIComponent(file)}`;
   }
