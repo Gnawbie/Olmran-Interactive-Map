@@ -157,12 +157,16 @@
   // One shared drag tracker for all pieces (rather than a listener per
   // piece) -- mousedown on a piece's image arms it, map-level mousemove
   // drags it, mouseup/mouseleave releases it.
-  function attachDragHandlers(overlay, label) {
+  function attachDragHandlers(overlay, label, file) {
     const el = overlay.getElement();
     if (!el) return;
     el.classList.add("realm-piece-img");
     el.addEventListener("mousedown", (e) => {
       e.preventDefault();
+      if (splitMode) {
+        openSplitModal(currentRealm, file);
+        return;
+      }
       activeDrag = {
         overlay,
         label,
@@ -180,6 +184,259 @@
     if (el) el.classList.remove("dragging");
     activeDrag = null;
     map.dragging.enable();
+  }
+
+  // ---- Split-piece tool ----
+  // Lets a dev cut a piece image apart into separate files without leaving
+  // the browser: freehand-erase the lines connecting rooms that should be
+  // independent pieces, then the tool finds each resulting disconnected
+  // blob of pixels and offers it as its own downloadable PNG. Downloaded
+  // files still need to be dropped into pieces/<realm>/ and added to
+  // realm-pieces.js / the seed layout by hand -- this only does the cut.
+  let splitMode = false;
+  let splitState = null;
+
+  function baseNameFor(file) {
+    return file.replace(/\.png$/i, "");
+  }
+
+  function redrawSplitDisplay() {
+    const s = splitState;
+    s.displayCtx.clearRect(0, 0, s.displayCanvas.width, s.displayCanvas.height);
+    s.displayCtx.drawImage(s.fullCanvas, 0, 0, s.displayCanvas.width, s.displayCanvas.height);
+  }
+
+  function openSplitModal(realm, file) {
+    const img = new Image();
+    img.onload = () => {
+      const natW = img.naturalWidth, natH = img.naturalHeight;
+      const fullCanvas = document.createElement("canvas");
+      fullCanvas.width = natW;
+      fullCanvas.height = natH;
+      const fullCtx = fullCanvas.getContext("2d");
+      fullCtx.drawImage(img, 0, 0);
+
+      const maxW = Math.min(window.innerWidth * 0.86, 900);
+      const maxH = Math.min(window.innerHeight * 0.5, 620);
+      const scale = Math.min(1, maxW / natW, maxH / natH);
+
+      const displayCanvas = document.getElementById("split-canvas");
+      displayCanvas.width = Math.round(natW * scale);
+      displayCanvas.height = Math.round(natH * scale);
+      const displayCtx = displayCanvas.getContext("2d");
+
+      splitState = {
+        realm, file, img, fullCanvas, fullCtx, displayCanvas, displayCtx, scale, natW, natH,
+        drawing: false, undoStack: [],
+        brushSize: parseInt(document.getElementById("split-brush-size").value, 10),
+        labels: null, components: null
+      };
+
+      redrawSplitDisplay();
+      document.getElementById("split-piece-name").textContent = `${baseNameFor(file)} (${realm})`;
+      document.getElementById("split-results").classList.add("hidden");
+      document.getElementById("split-results-list").innerHTML = "";
+      // Default noise floor scales with image area -- a fixed pixel count
+      // either floods text-heavy pieces with individual letter fragments or
+      // discards real content on small pieces. Editable since it's a guess.
+      document.getElementById("split-min-size").value = Math.max(150, Math.round(natW * natH * 0.0015));
+      document.getElementById("split-modal").classList.remove("hidden");
+    };
+    img.src = `pieces/${realm}/${encodeURIComponent(file)}`;
+  }
+
+  function closeSplitModal() {
+    document.getElementById("split-modal").classList.add("hidden");
+    splitState = null;
+  }
+
+  function splitCanvasPoint(e) {
+    const rect = splitState.displayCanvas.getBoundingClientRect();
+    return [(e.clientX - rect.left) / splitState.scale, (e.clientY - rect.top) / splitState.scale];
+  }
+
+  function eraseAt(x, y, radius) {
+    const ctx = splitState.fullCtx;
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function eraseStroke(x0, y0, x1, y1, radius) {
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.ceil(dist / Math.max(2, radius / 2)));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      eraseAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, radius);
+    }
+  }
+
+  // Flood fill (iterative, 8-connected) over every non-transparent pixel to
+  // find each disconnected blob left after the dev's cuts.
+  function findComponents(imageData, w, h) {
+    const data = imageData.data;
+    const labels = new Int32Array(w * h);
+    const stackX = new Int32Array(w * h);
+    const stackY = new Int32Array(w * h);
+    let nextLabel = 0;
+    const components = [];
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = y * w + x;
+        if (labels[idx] !== 0 || data[idx * 4 + 3] < 10) continue;
+
+        nextLabel++;
+        let sp = 0;
+        stackX[sp] = x; stackY[sp] = y; sp++;
+        labels[idx] = nextLabel;
+        let count = 0, minX = x, maxX = x, minY = y, maxY = y;
+
+        while (sp > 0) {
+          sp--;
+          const cx = stackX[sp], cy = stackY[sp];
+          count++;
+          if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+          if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+
+          for (let ny = cy - 1; ny <= cy + 1; ny++) {
+            if (ny < 0 || ny >= h) continue;
+            for (let nx = cx - 1; nx <= cx + 1; nx++) {
+              if (nx < 0 || nx >= w) continue;
+              const nidx = ny * w + nx;
+              if (labels[nidx] !== 0 || data[nidx * 4 + 3] < 10) continue;
+              labels[nidx] = nextLabel;
+              stackX[sp] = nx; stackY[sp] = ny; sp++;
+            }
+          }
+        }
+        components.push({ id: nextLabel, count, minX, maxX, minY, maxY });
+      }
+    }
+    return { labels, components };
+  }
+
+  // A squat, wide blob sitting in the top slice of the image is almost
+  // always the piece's title text, not a real room area.
+  function detectTitleComponent(components, natH) {
+    const topBand = natH * 0.15;
+    let best = null;
+    components.forEach(c => {
+      const w = c.maxX - c.minX, h = c.maxY - c.minY;
+      if (c.minY > topBand || h === 0 || w / h < 1.4) return;
+      if (!best || c.count < best.count) best = c;
+    });
+    return best;
+  }
+
+  function cropComponent(c, margin) {
+    const s = splitState;
+    const x0 = Math.max(0, c.minX - margin);
+    const y0 = Math.max(0, c.minY - margin);
+    const x1 = Math.min(s.natW, c.maxX + margin + 1);
+    const y1 = Math.min(s.natH, c.maxY + margin + 1);
+    const w = x1 - x0, h = y1 - y0;
+
+    const srcData = s.fullCtx.getImageData(x0, y0, w, h);
+    const out = new ImageData(w, h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const gidx = (y0 + y) * s.natW + (x0 + x);
+        if (s.labels[gidx] !== c.id) continue;
+        const oidx = (y * w + x) * 4;
+        out.data[oidx] = srcData.data[oidx];
+        out.data[oidx + 1] = srcData.data[oidx + 1];
+        out.data[oidx + 2] = srcData.data[oidx + 2];
+        out.data[oidx + 3] = srcData.data[oidx + 3];
+      }
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").putImageData(out, 0, 0);
+    return canvas;
+  }
+
+  function downloadCanvas(canvas, filename) {
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }, "image/png");
+  }
+
+  function runSplitAnalysis() {
+    const s = splitState;
+    const imageData = s.fullCtx.getImageData(0, 0, s.natW, s.natH);
+    const { labels, components } = findComponents(imageData, s.natW, s.natH);
+    const minSize = Math.max(1, parseInt(document.getElementById("split-min-size").value, 10) || 150);
+    const kept = components.filter(c => c.count >= minSize).sort((a, b) => b.count - a.count);
+    s.labels = labels;
+    s.components = kept;
+
+    const titleGuess = detectTitleComponent(kept, s.natH);
+    const base = baseNameFor(s.file);
+
+    const listEl = document.getElementById("split-results-list");
+    listEl.innerHTML = "";
+    kept.forEach((c, i) => {
+      const w = c.maxX - c.minX + 1, h = c.maxY - c.minY + 1;
+      const isTitleGuess = titleGuess && c.id === titleGuess.id;
+      const row = document.createElement("div");
+      row.className = "split-result-row";
+      row.innerHTML = `
+        <label><input type="checkbox" class="split-include" data-id="${c.id}" ${isTitleGuess ? "" : "checked"}> Part</label>
+        <label><input type="radio" name="split-title" class="split-title-radio" data-id="${c.id}" ${isTitleGuess ? "checked" : ""}> Title</label>
+        <span class="split-result-meta">${w}&times;${h}px, ${c.count.toLocaleString()}px</span>
+        <input type="text" class="split-filename" value="${escapeHtml(`${base} (Part ${i + 1}).png`)}">
+      `;
+      listEl.appendChild(row);
+    });
+    const noTitleRow = document.createElement("div");
+    noTitleRow.className = "split-result-row";
+    noTitleRow.innerHTML = `<label><input type="radio" name="split-title" class="split-title-radio" data-id="0" ${titleGuess ? "" : "checked"}> No title overlay on the other parts</label>`;
+    listEl.appendChild(noTitleRow);
+
+    document.getElementById("split-results").classList.remove("hidden");
+  }
+
+  function downloadSplitParts() {
+    const s = splitState;
+    if (!s || !s.components) return;
+    const titleRadio = document.querySelector(".split-title-radio:checked");
+    const titleId = titleRadio ? parseInt(titleRadio.dataset.id, 10) : 0;
+    let titleCanvas = null;
+    if (titleId) {
+      const titleComp = s.components.find(c => c.id === titleId);
+      if (titleComp) titleCanvas = cropComponent(titleComp, 6);
+    }
+
+    let delay = 0;
+    document.querySelectorAll(".split-result-row").forEach(row => {
+      const checkbox = row.querySelector(".split-include");
+      if (!checkbox || !checkbox.checked) return;
+      const id = parseInt(checkbox.dataset.id, 10);
+      const comp = s.components.find(c => c.id === id);
+      if (!comp) return;
+      const filenameInput = row.querySelector(".split-filename");
+      let filename = filenameInput.value.trim();
+      if (!filename) return;
+      if (!/\.png$/i.test(filename)) filename += ".png";
+
+      const canvas = cropComponent(comp, 30);
+      if (titleCanvas && titleId !== id) {
+        canvas.getContext("2d").drawImage(titleCanvas, 15, 8);
+      }
+      setTimeout(() => downloadCanvas(canvas, filename), delay);
+      delay += 250;
+    });
   }
 
   function renderRealm(realm, layoutOverride) {
@@ -202,7 +459,7 @@
       const label = L.marker(bounds.getNorthWest(), { icon: labelIcon(piece.file), interactive: false });
       pieceLayerGroup.addLayer(label);
 
-      attachDragHandlers(overlay, label);
+      attachDragHandlers(overlay, label, piece.file);
       overlaysByFile[piece.file] = { overlay, label };
     });
 
@@ -327,6 +584,69 @@
         map.fitBounds(pieceLayerGroup.getBounds(), { padding: [80, 80], animate: false });
       }
     });
+
+    document.getElementById("split-mode-btn").addEventListener("click", (e) => {
+      splitMode = !splitMode;
+      e.target.classList.toggle("active", splitMode);
+    });
+
+    document.getElementById("split-close-btn").addEventListener("click", closeSplitModal);
+
+    (function initSplitCanvasEvents() {
+      const canvas = document.getElementById("split-canvas");
+      let last = null;
+      canvas.addEventListener("mousedown", (e) => {
+        if (!splitState) return;
+        e.preventDefault();
+        splitState.undoStack.push(splitState.fullCtx.getImageData(0, 0, splitState.natW, splitState.natH));
+        splitState.drawing = true;
+        last = splitCanvasPoint(e);
+        eraseAt(last[0], last[1], splitState.brushSize);
+        redrawSplitDisplay();
+      });
+      canvas.addEventListener("mousemove", (e) => {
+        if (!splitState || !splitState.drawing) return;
+        const p = splitCanvasPoint(e);
+        eraseStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
+        last = p;
+        redrawSplitDisplay();
+      });
+      window.addEventListener("mouseup", () => {
+        if (splitState) splitState.drawing = false;
+      });
+    })();
+
+    document.getElementById("split-brush-size").addEventListener("input", (e) => {
+      if (splitState) splitState.brushSize = parseInt(e.target.value, 10);
+    });
+
+    document.getElementById("split-undo-btn").addEventListener("click", () => {
+      if (!splitState || splitState.undoStack.length === 0) return;
+      splitState.fullCtx.putImageData(splitState.undoStack.pop(), 0, 0);
+      redrawSplitDisplay();
+    });
+
+    document.getElementById("split-clear-btn").addEventListener("click", () => {
+      if (!splitState) return;
+      splitState.fullCtx.clearRect(0, 0, splitState.natW, splitState.natH);
+      splitState.fullCtx.drawImage(splitState.img, 0, 0);
+      splitState.undoStack = [];
+      redrawSplitDisplay();
+    });
+
+    document.getElementById("split-analyze-btn").addEventListener("click", (e) => {
+      if (!splitState) return;
+      const original = e.target.textContent;
+      e.target.textContent = "Analyzing...";
+      e.target.disabled = true;
+      setTimeout(() => {
+        runSplitAnalysis();
+        e.target.textContent = original;
+        e.target.disabled = false;
+      }, 20);
+    });
+
+    document.getElementById("split-download-btn").addEventListener("click", downloadSplitParts);
 
     renderRealm(currentRealm);
   }

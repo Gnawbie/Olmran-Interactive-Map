@@ -184,3 +184,178 @@ html, body {
   white-space: nowrap;
   pointer-events: none;
 }
+
+#split-mode-btn.active {
+  background: #ffd76c;
+  border-color: #ffd76c;
+  color: #16181f;
+}
+
+/* ---- Split-piece modal ---- */
+#split-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8,9,12,0.75);
+}
+
+#split-modal-inner {
+  width: min(94vw, 1000px);
+  max-height: 92vh;
+  overflow-y: auto;
+  background: #181b22;
+  border: 1px solid #3a3f4b;
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+
+#split-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+#split-piece-name {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+#split-close-btn {
+  background: none;
+  border: none;
+  color: #f0ead9;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+#split-close-btn:hover { color: #ffd76c; }
+
+#split-instructions {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  color: #8ea0d0;
+}
+
+#split-canvas-wrap {
+  background:
+    linear-gradient(45deg, #2a2d35 25%, transparent 25%),
+    linear-gradient(-45deg, #2a2d35 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #2a2d35 75%),
+    linear-gradient(-45deg, transparent 75%, #2a2d35 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  background-color: #1c1f26;
+  border: 1px solid #3a3f4b;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#split-canvas {
+  cursor: crosshair;
+  display: block;
+}
+
+#split-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #8ea0d0;
+}
+
+#split-controls button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0ead9;
+  cursor: pointer;
+  font-size: 13px;
+}
+#split-controls button:hover { background: #2a2f3a; }
+
+#split-controls input[type="number"] {
+  padding: 5px 7px;
+  border-radius: 5px;
+  border: 1px solid #444a58;
+  background: #14161c;
+  color: #f0f0f0;
+  font-size: 12px;
+}
+
+#split-analyze-btn {
+  border-color: #4ade56;
+  color: #4ade56;
+  margin-left: auto;
+}
+
+#split-results {
+  margin-top: 14px;
+  border-top: 1px solid #3a3f4b;
+  padding-top: 12px;
+}
+
+#split-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.split-result-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: #20242e;
+  border: 1px solid #333844;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.split-result-row .split-result-meta {
+  color: #8ea0d0;
+  white-space: nowrap;
+}
+
+.split-result-row input[type="text"] {
+  flex: 1;
+  padding: 5px 7px;
+  border-radius: 5px;
+  border: 1px solid #444a58;
+  background: #14161c;
+  color: #f0f0f0;
+  font-size: 12px;
+}
+
+.split-result-row label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+#split-download-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #4ade56;
+  background: #20242e;
+  color: #4ade56;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+#split-download-btn:hover { background: #24352a; }
