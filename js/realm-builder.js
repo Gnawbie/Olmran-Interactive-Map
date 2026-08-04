@@ -303,8 +303,14 @@
   }
 
   function splitCanvasPoint(e) {
-    const rect = splitState.displayCanvas.getBoundingClientRect();
-    return [(e.clientX - rect.left) / splitState.scale, (e.clientY - rect.top) / splitState.scale];
+    const s = splitState;
+    const rect = s.displayCanvas.getBoundingClientRect();
+    // Clamped to the image bounds so a drag that overshoots the edge (very
+    // easy to do when you're deliberately aiming for the edge) still counts
+    // as reaching it, instead of the stroke stopping just short.
+    const x = (e.clientX - rect.left) / s.scale;
+    const y = (e.clientY - rect.top) / s.scale;
+    return [Math.min(Math.max(x, 0), s.natW - 1), Math.min(Math.max(y, 0), s.natH - 1)];
   }
 
   function eraseAt(x, y, radius) {
@@ -978,7 +984,11 @@
         eraseAt(last[0], last[1], splitState.brushSize);
         redrawSplitDisplay();
       });
-      canvas.addEventListener("mousemove", (e) => {
+      // On window, not canvas -- dragging toward an edge very easily carries
+      // the cursor a little past the canvas element's own bounds, and a
+      // canvas-scoped listener simply stops receiving events at that point,
+      // cutting the stroke short right when you need it to reach the edge.
+      window.addEventListener("mousemove", (e) => {
         if (!splitState || !splitState.drawing) return;
         const p = splitCanvasPoint(e);
         eraseStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
