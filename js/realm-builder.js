@@ -274,13 +274,15 @@
         realm, file, img, fullCanvas, fullCtx, displayCanvas, displayCtx, scale, natW, natH,
         drawing: false, undoStack: [],
         brushSize: parseInt(document.getElementById("split-brush-size").value, 10),
-        labels: null, components: null
+        labels: null, components: null, componentsById: null, groups: null, dragSourceGroupId: null
       };
 
       redrawSplitDisplay();
       document.getElementById("split-piece-name").textContent = `${baseNameFor(file)} (${realm})`;
+      document.getElementById("split-editing-area").classList.remove("hidden");
+      document.getElementById("split-final").classList.add("hidden");
       document.getElementById("split-results").classList.add("hidden");
-      document.getElementById("split-results-list").innerHTML = "";
+      document.getElementById("split-groups-grid").innerHTML = "";
       // Default noise floor scales with image area -- a fixed pixel count
       // either floods text-heavy pieces with individual letter fragments or
       // discards real content on small pieces. Editable since it's a guess.
@@ -377,12 +379,31 @@
     return best;
   }
 
-  function cropComponent(c, margin) {
+  // A "group" is one or more raw connected-components merged together by
+  // the dev (drag one card onto another) -- e.g. reattaching a stray exit
+  // label to the room cluster it actually belongs to, or undoing an
+  // over-eager cut. Everything downstream (preview, title pick, place,
+  // download) operates on groups, not raw components.
+  function groupBBox(group) {
     const s = splitState;
-    const x0 = Math.max(0, c.minX - margin);
-    const y0 = Math.max(0, c.minY - margin);
-    const x1 = Math.min(s.natW, c.maxX + margin + 1);
-    const y1 = Math.min(s.natH, c.maxY + margin + 1);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, count = 0;
+    group.memberIds.forEach(id => {
+      const c = s.componentsById.get(id);
+      if (!c) return;
+      minX = Math.min(minX, c.minX); minY = Math.min(minY, c.minY);
+      maxX = Math.max(maxX, c.maxX); maxY = Math.max(maxY, c.maxY);
+      count += c.count;
+    });
+    return { minX, minY, maxX, maxY, count };
+  }
+
+  function cropGroupCanvas(group, margin) {
+    const s = splitState;
+    const bbox = groupBBox(group);
+    const x0 = Math.max(0, bbox.minX - margin);
+    const y0 = Math.max(0, bbox.minY - margin);
+    const x1 = Math.min(s.natW, bbox.maxX + margin + 1);
+    const y1 = Math.min(s.natH, bbox.maxY + margin + 1);
     const w = x1 - x0, h = y1 - y0;
 
     const srcData = s.fullCtx.getImageData(x0, y0, w, h);
@@ -390,7 +411,7 @@
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const gidx = (y0 + y) * s.natW + (x0 + x);
-        if (s.labels[gidx] !== c.id) continue;
+        if (!group.memberIds.has(s.labels[gidx])) continue;
         const oidx = (y * w + x) * 4;
         out.data[oidx] = srcData.data[oidx];
         out.data[oidx + 1] = srcData.data[oidx + 1];
@@ -401,7 +422,7 @@
     const canvas = document.createElement("canvas");
     canvas.width = w; canvas.height = h;
     canvas.getContext("2d").putImageData(out, 0, 0);
-    return canvas;
+    return { canvas, x0, y0 };
   }
 
   function downloadCanvas(canvas, filename) {
@@ -425,58 +446,141 @@
     const kept = components.filter(c => c.count >= minSize).sort((a, b) => b.count - a.count);
     s.labels = labels;
     s.components = kept;
+    s.componentsById = new Map(kept.map(c => [c.id, c]));
 
     const titleGuess = detectTitleComponent(kept, s.natH);
     const base = baseNameFor(s.file);
 
-    const listEl = document.getElementById("split-results-list");
-    listEl.innerHTML = "";
-    kept.forEach((c, i) => {
-      const w = c.maxX - c.minX + 1, h = c.maxY - c.minY + 1;
-      const isTitleGuess = titleGuess && c.id === titleGuess.id;
-      const row = document.createElement("div");
-      row.className = "split-result-row";
-      row.innerHTML = `
-        <label><input type="checkbox" class="split-include" data-id="${c.id}" ${isTitleGuess ? "" : "checked"}> Part</label>
-        <label><input type="radio" name="split-title" class="split-title-radio" data-id="${c.id}" ${isTitleGuess ? "checked" : ""}> Title</label>
-        <span class="split-result-meta">${w}&times;${h}px, ${c.count.toLocaleString()}px</span>
-        <input type="text" class="split-filename" value="${escapeHtml(`${base} (Part ${i + 1}).png`)}">
+    s.nextGroupId = 1;
+    s.groups = kept.map((c, i) => {
+      const isTitleGuess = !!(titleGuess && c.id === titleGuess.id);
+      return {
+        id: s.nextGroupId++,
+        memberIds: new Set([c.id]),
+        included: !isTitleGuess,
+        isTitle: isTitleGuess,
+        filename: `${base} (Part ${i + 1}).png`
+      };
+    });
+
+    document.getElementById("split-final").classList.add("hidden");
+    document.getElementById("split-editing-area").classList.remove("hidden");
+    document.getElementById("split-results").classList.remove("hidden");
+    renderGroupsGrid();
+  }
+
+  function renderGroupsGrid() {
+    const s = splitState;
+    const grid = document.getElementById("split-groups-grid");
+    grid.innerHTML = "";
+
+    s.groups.forEach(g => {
+      const bbox = groupBBox(g);
+      const w = bbox.maxX - bbox.minX + 1, h = bbox.maxY - bbox.minY + 1;
+
+      const card = document.createElement("div");
+      card.className = "split-group-card";
+      card.draggable = true;
+      card.dataset.groupId = g.id;
+      card.innerHTML = `
+        <canvas class="split-group-thumb"></canvas>
+        <div class="split-group-meta">${w}&times;${h}px, ${bbox.count.toLocaleString()}px</div>
+        <label><input type="checkbox" class="split-include" ${g.included ? "checked" : ""}> Include</label>
+        <label><input type="radio" name="split-title" class="split-title-radio" ${g.isTitle ? "checked" : ""}> Title</label>
+        <input type="text" class="split-filename" value="${escapeHtml(g.filename)}">
       `;
+      grid.appendChild(card);
+
+      const { canvas: fullCrop } = cropGroupCanvas(g, 10);
+      const thumb = card.querySelector(".split-group-thumb");
+      const maxDim = 130;
+      const thumbScale = Math.min(1, maxDim / fullCrop.width, maxDim / fullCrop.height);
+      thumb.width = Math.max(1, Math.round(fullCrop.width * thumbScale));
+      thumb.height = Math.max(1, Math.round(fullCrop.height * thumbScale));
+      thumb.getContext("2d").drawImage(fullCrop, 0, 0, thumb.width, thumb.height);
+
+      card.querySelector(".split-include").addEventListener("change", (e) => { g.included = e.target.checked; });
+      card.querySelector(".split-title-radio").addEventListener("change", () => {
+        s.groups.forEach(other => { other.isTitle = (other.id === g.id); });
+      });
+      card.querySelector(".split-filename").addEventListener("input", (e) => { g.filename = e.target.value; });
+
+      card.addEventListener("dragstart", () => { s.dragSourceGroupId = g.id; });
+      card.addEventListener("dragover", (e) => { e.preventDefault(); card.classList.add("drag-over"); });
+      card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+      card.addEventListener("drop", (e) => {
+        e.preventDefault();
+        card.classList.remove("drag-over");
+        if (s.dragSourceGroupId == null || s.dragSourceGroupId === g.id) return;
+        mergeGroups(s.dragSourceGroupId, g.id);
+      });
+    });
+  }
+
+  // Merges source into target (e.g. drag a stray exit-label card onto the
+  // room-cluster card it belongs with) -- target's own filename/include
+  // choice wins, source's card disappears.
+  function mergeGroups(sourceId, targetId) {
+    const s = splitState;
+    const source = s.groups.find(g => g.id === sourceId);
+    const target = s.groups.find(g => g.id === targetId);
+    if (!source || !target) return;
+    source.memberIds.forEach(id => target.memberIds.add(id));
+    if (source.isTitle) target.isTitle = true;
+    target.included = target.included || source.included;
+    s.groups = s.groups.filter(g => g.id !== sourceId);
+    renderGroupsGrid();
+  }
+
+  function finishSplitEditing() {
+    const s = splitState;
+    if (!s || !s.groups) return;
+    const included = s.groups.filter(g => g.included);
+    if (included.length === 0) {
+      updateStatus("Select at least one piece to include before finishing.");
+      return;
+    }
+
+    const listEl = document.getElementById("split-final-list");
+    listEl.innerHTML = "";
+    included.forEach(g => {
+      const bbox = groupBBox(g);
+      const w = bbox.maxX - bbox.minX + 1, h = bbox.maxY - bbox.minY + 1;
+      const row = document.createElement("div");
+      row.className = "split-final-row";
+      row.innerHTML = `<span>${escapeHtml(g.filename || "(unnamed).png")}</span><span class="split-result-meta">${w}&times;${h}px</span>`;
       listEl.appendChild(row);
     });
-    const noTitleRow = document.createElement("div");
-    noTitleRow.className = "split-result-row";
-    noTitleRow.innerHTML = `<label><input type="radio" name="split-title" class="split-title-radio" data-id="0" ${titleGuess ? "" : "checked"}> No title overlay on the other parts</label>`;
-    listEl.appendChild(noTitleRow);
 
-    document.getElementById("split-results").classList.remove("hidden");
+    document.getElementById("split-editing-area").classList.add("hidden");
+    document.getElementById("split-final").classList.remove("hidden");
+  }
+
+  function backToSplitEditing() {
+    document.getElementById("split-final").classList.add("hidden");
+    document.getElementById("split-editing-area").classList.remove("hidden");
+  }
+
+  function titleCropForFinalize() {
+    const s = splitState;
+    const titleGroup = s.groups.find(g => g.isTitle);
+    return titleGroup ? cropGroupCanvas(titleGroup, 6).canvas : null;
   }
 
   function downloadSplitParts() {
     const s = splitState;
-    if (!s || !s.components) return;
-    const titleRadio = document.querySelector(".split-title-radio:checked");
-    const titleId = titleRadio ? parseInt(titleRadio.dataset.id, 10) : 0;
-    let titleCanvas = null;
-    if (titleId) {
-      const titleComp = s.components.find(c => c.id === titleId);
-      if (titleComp) titleCanvas = cropComponent(titleComp, 6);
-    }
+    if (!s || !s.groups) return;
+    const titleCanvas = titleCropForFinalize();
+    const titleGroup = s.groups.find(g => g.isTitle);
 
     let delay = 0;
-    document.querySelectorAll(".split-result-row").forEach(row => {
-      const checkbox = row.querySelector(".split-include");
-      if (!checkbox || !checkbox.checked) return;
-      const id = parseInt(checkbox.dataset.id, 10);
-      const comp = s.components.find(c => c.id === id);
-      if (!comp) return;
-      const filenameInput = row.querySelector(".split-filename");
-      let filename = filenameInput.value.trim();
+    s.groups.filter(g => g.included).forEach(g => {
+      let filename = (g.filename || "").trim();
       if (!filename) return;
       if (!/\.png$/i.test(filename)) filename += ".png";
 
-      const canvas = cropComponent(comp, 30);
-      if (titleCanvas && titleId !== id) {
+      const { canvas } = cropGroupCanvas(g, 30);
+      if (titleCanvas && (!titleGroup || titleGroup.id !== g.id)) {
         canvas.getContext("2d").drawImage(titleCanvas, 15, 8);
       }
       setTimeout(() => downloadCanvas(canvas, filename), delay);
@@ -485,12 +589,12 @@
   }
 
   // Cuts the piece apart RIGHT NOW in this session: the original is hidden,
-  // each kept region becomes its own draggable piece (in-memory data URL,
-  // no real file needed) positioned exactly where its content already was,
-  // so nothing jumps and you can start dragging groups apart immediately.
+  // each kept group becomes its own draggable piece (in-memory data URL, no
+  // real file needed) positioned exactly where its content already was, so
+  // nothing jumps and you can start dragging groups apart immediately.
   function placeSplitPartsLive() {
     const s = splitState;
-    if (!s || !s.components) return;
+    if (!s || !s.groups) return;
 
     const origEntry = overlaysByFile[s.file];
     if (!origEntry) {
@@ -501,35 +605,21 @@
     const origWorldX = Math.round(nw.lng);
     const origWorldY = Math.round(-nw.lat);
 
-    const titleRadio = document.querySelector(".split-title-radio:checked");
-    const titleId = titleRadio ? parseInt(titleRadio.dataset.id, 10) : 0;
-    let titleCanvas = null;
-    if (titleId) {
-      const titleComp = s.components.find(c => c.id === titleId);
-      if (titleComp) titleCanvas = cropComponent(titleComp, 6);
-    }
+    const titleCanvas = titleCropForFinalize();
+    const titleGroup = s.groups.find(g => g.isTitle);
 
     const virtual = loadVirtualPieces(s.realm);
     const hidden = loadHiddenOriginals(s.realm);
     const layout = loadLayoutFromStorage(s.realm) || {};
-    const margin = 30;
     let placedCount = 0;
 
-    document.querySelectorAll(".split-result-row").forEach(row => {
-      const checkbox = row.querySelector(".split-include");
-      if (!checkbox || !checkbox.checked) return;
-      const id = parseInt(checkbox.dataset.id, 10);
-      const comp = s.components.find(c => c.id === id);
-      if (!comp) return;
-      const filenameInput = row.querySelector(".split-filename");
-      let filename = filenameInput.value.trim();
+    s.groups.filter(g => g.included).forEach(g => {
+      let filename = (g.filename || "").trim();
       if (!filename) return;
       if (!/\.png$/i.test(filename)) filename += ".png";
 
-      const x0 = Math.max(0, comp.minX - margin);
-      const y0 = Math.max(0, comp.minY - margin);
-      const canvas = cropComponent(comp, margin);
-      if (titleCanvas && titleId !== id) {
+      const { canvas, x0, y0 } = cropGroupCanvas(g, 30);
+      if (titleCanvas && (!titleGroup || titleGroup.id !== g.id)) {
         canvas.getContext("2d").drawImage(titleCanvas, 15, 8);
       }
 
@@ -752,6 +842,9 @@
       splitState.fullCtx.clearRect(0, 0, splitState.natW, splitState.natH);
       splitState.fullCtx.drawImage(splitState.img, 0, 0);
       splitState.undoStack = [];
+      splitState.groups = null;
+      document.getElementById("split-results").classList.add("hidden");
+      document.getElementById("split-groups-grid").innerHTML = "";
       redrawSplitDisplay();
     });
 
@@ -766,6 +859,15 @@
         e.target.disabled = false;
       }, 20);
     });
+
+    document.getElementById("split-clear-title-btn").addEventListener("click", () => {
+      if (!splitState || !splitState.groups) return;
+      splitState.groups.forEach(g => { g.isTitle = false; });
+      renderGroupsGrid();
+    });
+
+    document.getElementById("split-finish-btn").addEventListener("click", finishSplitEditing);
+    document.getElementById("split-back-btn").addEventListener("click", backToSplitEditing);
 
     document.getElementById("split-place-btn").addEventListener("click", placeSplitPartsLive);
     document.getElementById("split-download-btn").addEventListener("click", downloadSplitParts);

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Realm Builder — Land of Olmran</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/realm-builder.css?v=9">
+<link rel="stylesheet" href="css/realm-builder.css?v=10">
 </head>
 <body>
 
@@ -49,31 +49,46 @@
       <span id="split-piece-name"></span>
       <button id="split-close-btn" title="Close">&times;</button>
     </div>
-    <p id="split-instructions">Draw over the lines connecting rooms you want separated, click Analyze Regions, then Place in Map to start dragging the parts around immediately.</p>
-    <div id="split-canvas-wrap">
-      <canvas id="split-canvas"></canvas>
+    <p id="split-instructions">Draw over the lines connecting rooms you want separated, then click Analyze Regions.</p>
+
+    <div id="split-editing-area">
+      <div id="split-canvas-wrap">
+        <canvas id="split-canvas"></canvas>
+      </div>
+      <div id="split-controls">
+        <label>Brush size <input type="range" id="split-brush-size" min="4" max="80" value="20"></label>
+        <label>Min region size <input type="number" id="split-min-size" min="50" step="50" style="width:80px"></label>
+        <button id="split-undo-btn">Undo Stroke</button>
+        <button id="split-clear-btn">Clear Cuts</button>
+        <button id="split-analyze-btn">Analyze Regions</button>
+      </div>
+
+      <div id="split-results" class="hidden">
+        <p id="split-groups-hint">Each card is a piece. Drag one card onto another to merge them together (use this to reattach a stray exit label, or undo an over-eager cut). Pick which one carries the piece's title.</p>
+        <div id="split-groups-grid"></div>
+        <div id="split-groups-actions">
+          <button id="split-clear-title-btn">Clear Title Selection</button>
+          <button id="split-finish-btn">Finish Editing</button>
+        </div>
+      </div>
     </div>
-    <div id="split-controls">
-      <label>Brush size <input type="range" id="split-brush-size" min="4" max="80" value="20"></label>
-      <label>Min region size <input type="number" id="split-min-size" min="50" step="50" style="width:80px"></label>
-      <button id="split-undo-btn">Undo Stroke</button>
-      <button id="split-clear-btn">Clear Cuts</button>
-      <button id="split-analyze-btn">Analyze Regions</button>
-    </div>
-    <div id="split-results" class="hidden">
-      <div id="split-results-list"></div>
+
+    <div id="split-final" class="hidden">
+      <p id="split-final-hint">Locked in. Place the parts on the map to start arranging, download them for a permanent save, or go back to keep editing.</p>
+      <div id="split-final-list"></div>
       <div id="split-results-actions">
         <button id="split-place-btn">Place in Map</button>
         <button id="split-download-btn">Download Parts (for a permanent save)</button>
+        <button id="split-back-btn">Back to Editing</button>
       </div>
     </div>
   </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/data/dev-accounts.js?v=8"></script>
-<script src="js/data/realm-pieces.js?v=8"></script>
-<script src="js/data/realm-seed-layout.js?v=8"></script>
-<script src="js/realm-builder.js?v=8"></script>
+<script src="js/data/dev-accounts.js?v=10"></script>
+<script src="js/data/realm-pieces.js?v=10"></script>
+<script src="js/data/realm-seed-layout.js?v=10"></script>
+<script src="js/realm-builder.js?v=10"></script>
 </body>
 </html>
