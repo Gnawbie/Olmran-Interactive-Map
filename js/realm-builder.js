@@ -246,6 +246,9 @@
     const s = splitState;
     s.displayCtx.clearRect(0, 0, s.displayCanvas.width, s.displayCanvas.height);
     s.displayCtx.drawImage(s.fullCanvas, 0, 0, s.displayCanvas.width, s.displayCanvas.height);
+    if (s.selectionCanvas) {
+      s.displayCtx.drawImage(s.selectionCanvas, 0, 0, s.displayCanvas.width, s.displayCanvas.height);
+    }
   }
 
   function openSplitModal(realm, file) {
@@ -261,6 +264,15 @@
       const fullCtx = fullCanvas.getContext("2d");
       fullCtx.drawImage(img, 0, 0);
 
+      // Manual-select paints here (never touches fullCanvas directly) so
+      // the selection can be shown as a tinted overlay and cleared without
+      // affecting the working image.
+      const selectionCanvas = document.createElement("canvas");
+      selectionCanvas.width = natW;
+      selectionCanvas.height = natH;
+      const selectionCtx = selectionCanvas.getContext("2d");
+      selectionCtx.fillStyle = "rgba(255, 215, 108, 0.55)";
+
       const maxW = Math.min(window.innerWidth * 0.86, 900);
       const maxH = Math.min(window.innerHeight * 0.5, 620);
       const scale = Math.min(1, maxW / natW, maxH / natH);
@@ -271,10 +283,10 @@
       const displayCtx = displayCanvas.getContext("2d");
 
       splitState = {
-        realm, file, img, fullCanvas, fullCtx, displayCanvas, displayCtx, scale, natW, natH,
+        realm, file, img, fullCanvas, fullCtx, selectionCanvas, selectionCtx, displayCanvas, displayCtx, scale, natW, natH,
         drawing: false, undoStack: [],
         brushSize: parseInt(document.getElementById("split-brush-size").value, 10),
-        labels: null, components: null, componentsById: null, groups: null, dragSourceGroupId: null
+        groups: null, nextGroupId: 1, dragSourceGroupId: null
       };
 
       redrawSplitDisplay();
@@ -283,6 +295,9 @@
       document.getElementById("split-final").classList.add("hidden");
       document.getElementById("split-results").classList.add("hidden");
       document.getElementById("split-groups-grid").innerHTML = "";
+      document.getElementById("split-manual-mode").checked = false;
+      document.getElementById("split-erase-controls").classList.remove("hidden");
+      document.getElementById("split-manual-controls").classList.add("hidden");
       // Default noise floor scales with image area -- a fixed pixel count
       // either floods text-heavy pieces with individual letter fragments or
       // discards real content on small pieces. Editable since it's a guess.
@@ -379,39 +394,29 @@
     return best;
   }
 
-  // A "group" is one or more raw connected-components merged together by
-  // the dev (drag one card onto another) -- e.g. reattaching a stray exit
-  // label to the room cluster it actually belongs to, or undoing an
-  // over-eager cut. Everything downstream (preview, title pick, place,
-  // download) operates on groups, not raw components.
-  function groupBBox(group) {
-    const s = splitState;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, count = 0;
-    group.memberIds.forEach(id => {
-      const c = s.componentsById.get(id);
-      if (!c) return;
-      minX = Math.min(minX, c.minX); minY = Math.min(minY, c.minY);
-      maxX = Math.max(maxX, c.maxX); maxY = Math.max(maxY, c.maxY);
-      count += c.count;
-    });
-    return { minX, minY, maxX, maxY, count };
-  }
-
-  function cropGroupCanvas(group, margin) {
-    const s = splitState;
-    const bbox = groupBBox(group);
-    const x0 = Math.max(0, bbox.minX - margin);
-    const y0 = Math.max(0, bbox.minY - margin);
-    const x1 = Math.min(s.natW, bbox.maxX + margin + 1);
-    const y1 = Math.min(s.natH, bbox.maxY + margin + 1);
+  // A "group" is a fully self-contained piece: its own already-cropped RGBA
+  // canvas plus the (x0,y0) offset of that canvas within the original full
+  // image. Every source -- an auto-detected connected component, a manual
+  // paint-and-add selection, or a merge of two other groups -- produces one
+  // of these, so preview/merge/title/place/download all work identically
+  // regardless of how the group was created, and none of them need to
+  // re-derive anything from the original pixel data after creation (that
+  // re-derivation, done once per group up front instead of repeatedly, is
+  // also what keeps this from bogging down on pieces with lots of regions).
+  function cropComponentToGroup(labels, component, natW, natH, margin) {
+    const x0 = Math.max(0, component.minX - margin);
+    const y0 = Math.max(0, component.minY - margin);
+    const x1 = Math.min(natW, component.maxX + margin + 1);
+    const y1 = Math.min(natH, component.maxY + margin + 1);
     const w = x1 - x0, h = y1 - y0;
 
+    const s = splitState;
     const srcData = s.fullCtx.getImageData(x0, y0, w, h);
     const out = new ImageData(w, h);
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        const gidx = (y0 + y) * s.natW + (x0 + x);
-        if (!group.memberIds.has(s.labels[gidx])) continue;
+        const gidx = (y0 + y) * natW + (x0 + x);
+        if (labels[gidx] !== component.id) continue;
         const oidx = (y * w + x) * 4;
         out.data[oidx] = srcData.data[oidx];
         out.data[oidx + 1] = srcData.data[oidx + 1];
@@ -438,35 +443,58 @@
     }, "image/png");
   }
 
+  // Hard cap on how many auto-detected regions get turned into cards. A low
+  // "min region size" on a text-heavy piece can otherwise yield thousands of
+  // individual letter/icon fragments, each needing its own cropped canvas +
+  // thumbnail -- that's what was actually making Analyze look hung, not the
+  // flood fill itself. Only the largest MAX_AUTO_GROUPS survive; raise "min
+  // region size" to see smaller ones, or use Manual Select for a few odd
+  // ones instead of relying on auto-detection at all.
+  const MAX_AUTO_GROUPS = 120;
+
+  function nextGroupId() {
+    splitState.nextGroupId = (splitState.nextGroupId || 1);
+    return splitState.nextGroupId++;
+  }
+
   function runSplitAnalysis() {
     const s = splitState;
     const imageData = s.fullCtx.getImageData(0, 0, s.natW, s.natH);
     const { labels, components } = findComponents(imageData, s.natW, s.natH);
     const minSize = Math.max(1, parseInt(document.getElementById("split-min-size").value, 10) || 150);
-    const kept = components.filter(c => c.count >= minSize).sort((a, b) => b.count - a.count);
-    s.labels = labels;
-    s.components = kept;
-    s.componentsById = new Map(kept.map(c => [c.id, c]));
+    let kept = components.filter(c => c.count >= minSize).sort((a, b) => b.count - a.count);
+
+    let truncated = false;
+    if (kept.length > MAX_AUTO_GROUPS) {
+      kept = kept.slice(0, MAX_AUTO_GROUPS);
+      truncated = true;
+    }
 
     const titleGuess = detectTitleComponent(kept, s.natH);
     const base = baseNameFor(s.file);
 
-    s.nextGroupId = 1;
-    s.groups = kept.map((c, i) => {
+    if (!s.groups) s.groups = [];
+    const startCount = s.groups.length;
+    kept.forEach((c, i) => {
+      const { canvas, x0, y0 } = cropComponentToGroup(labels, c, s.natW, s.natH, 30);
       const isTitleGuess = !!(titleGuess && c.id === titleGuess.id);
-      return {
-        id: s.nextGroupId++,
-        memberIds: new Set([c.id]),
+      s.groups.push({
+        id: nextGroupId(),
+        canvas, x0, y0,
         included: !isTitleGuess,
         isTitle: isTitleGuess,
-        filename: `${base} (Part ${i + 1}).png`
-      };
+        filename: `${base} (Part ${startCount + i + 1}).png`
+      });
     });
 
     document.getElementById("split-final").classList.add("hidden");
     document.getElementById("split-editing-area").classList.remove("hidden");
     document.getElementById("split-results").classList.remove("hidden");
     renderGroupsGrid();
+
+    if (truncated) {
+      updateStatus(`Found more than ${MAX_AUTO_GROUPS} regions -- showing the ${MAX_AUTO_GROUPS} largest. Raise "min region size" to catch smaller ones, or add them with Manual Select.`);
+    }
   }
 
   function renderGroupsGrid() {
@@ -475,29 +503,25 @@
     grid.innerHTML = "";
 
     s.groups.forEach(g => {
-      const bbox = groupBBox(g);
-      const w = bbox.maxX - bbox.minX + 1, h = bbox.maxY - bbox.minY + 1;
-
       const card = document.createElement("div");
       card.className = "split-group-card";
       card.draggable = true;
       card.dataset.groupId = g.id;
       card.innerHTML = `
         <canvas class="split-group-thumb"></canvas>
-        <div class="split-group-meta">${w}&times;${h}px, ${bbox.count.toLocaleString()}px</div>
+        <div class="split-group-meta">${g.canvas.width}&times;${g.canvas.height}px</div>
         <label><input type="checkbox" class="split-include" ${g.included ? "checked" : ""}> Include</label>
         <label><input type="radio" name="split-title" class="split-title-radio" ${g.isTitle ? "checked" : ""}> Title</label>
         <input type="text" class="split-filename" value="${escapeHtml(g.filename)}">
       `;
       grid.appendChild(card);
 
-      const { canvas: fullCrop } = cropGroupCanvas(g, 10);
       const thumb = card.querySelector(".split-group-thumb");
       const maxDim = 130;
-      const thumbScale = Math.min(1, maxDim / fullCrop.width, maxDim / fullCrop.height);
-      thumb.width = Math.max(1, Math.round(fullCrop.width * thumbScale));
-      thumb.height = Math.max(1, Math.round(fullCrop.height * thumbScale));
-      thumb.getContext("2d").drawImage(fullCrop, 0, 0, thumb.width, thumb.height);
+      const thumbScale = Math.min(1, maxDim / g.canvas.width, maxDim / g.canvas.height);
+      thumb.width = Math.max(1, Math.round(g.canvas.width * thumbScale));
+      thumb.height = Math.max(1, Math.round(g.canvas.height * thumbScale));
+      thumb.getContext("2d").drawImage(g.canvas, 0, 0, thumb.width, thumb.height);
 
       card.querySelector(".split-include").addEventListener("change", (e) => { g.included = e.target.checked; });
       card.querySelector(".split-title-radio").addEventListener("change", () => {
@@ -519,16 +543,127 @@
 
   // Merges source into target (e.g. drag a stray exit-label card onto the
   // room-cluster card it belongs with) -- target's own filename/include
-  // choice wins, source's card disappears.
+  // choice wins, source's card disappears. Works for any mix of
+  // auto-detected and manually-added groups since both are just a
+  // canvas + offset.
   function mergeGroups(sourceId, targetId) {
     const s = splitState;
     const source = s.groups.find(g => g.id === sourceId);
     const target = s.groups.find(g => g.id === targetId);
     if (!source || !target) return;
-    source.memberIds.forEach(id => target.memberIds.add(id));
+
+    const x0 = Math.min(source.x0, target.x0);
+    const y0 = Math.min(source.y0, target.y0);
+    const x1 = Math.max(source.x0 + source.canvas.width, target.x0 + target.canvas.width);
+    const y1 = Math.max(source.y0 + source.canvas.height, target.y0 + target.canvas.height);
+    const merged = document.createElement("canvas");
+    merged.width = x1 - x0;
+    merged.height = y1 - y0;
+    const ctx = merged.getContext("2d");
+    ctx.drawImage(source.canvas, source.x0 - x0, source.y0 - y0);
+    ctx.drawImage(target.canvas, target.x0 - x0, target.y0 - y0);
+
+    target.canvas = merged;
+    target.x0 = x0;
+    target.y0 = y0;
     if (source.isTitle) target.isTitle = true;
     target.included = target.included || source.included;
     s.groups = s.groups.filter(g => g.id !== sourceId);
+    renderGroupsGrid();
+  }
+
+  // ---- Manual select ----
+  // An alternative to cut-then-analyze for when auto-detection is the wrong
+  // tool (too many/too few regions, or it's just faster to point at what you
+  // want): paint directly over the piece you want, click "Add Selection as
+  // Piece", repeat. No flood fill involved at all.
+  function paintSelectionAt(x, y, radius) {
+    const ctx = splitState.selectionCtx;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function paintSelectionStroke(x0, y0, x1, y1, radius) {
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.ceil(dist / Math.max(2, radius / 2)));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      paintSelectionAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, radius);
+    }
+  }
+
+  function clearManualSelection() {
+    const s = splitState;
+    if (!s) return;
+    s.selectionCtx.clearRect(0, 0, s.natW, s.natH);
+    redrawSplitDisplay();
+  }
+
+  function addManualSelectionAsPiece() {
+    const s = splitState;
+    if (!s) return;
+
+    const selData = s.selectionCtx.getImageData(0, 0, s.natW, s.natH);
+    const fullData = s.fullCtx.getImageData(0, 0, s.natW, s.natH);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
+    for (let y = 0; y < s.natH; y++) {
+      for (let x = 0; x < s.natW; x++) {
+        const idx = y * s.natW + x;
+        if (selData.data[idx * 4 + 3] <= 10 || fullData.data[idx * 4 + 3] <= 10) continue;
+        any = true;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+    }
+    if (!any) {
+      updateStatus("Nothing selected yet -- paint over the piece you want first.");
+      return;
+    }
+
+    const margin = 20;
+    const x0 = Math.max(0, minX - margin), y0 = Math.max(0, minY - margin);
+    const x1 = Math.min(s.natW, maxX + margin + 1), y1 = Math.min(s.natH, maxY + margin + 1);
+    const w = x1 - x0, h = y1 - y0;
+    const out = new ImageData(w, h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const gx = x0 + x, gy = y0 + y, gidx = gy * s.natW + gx;
+        if (selData.data[gidx * 4 + 3] <= 10 || fullData.data[gidx * 4 + 3] <= 10) continue;
+        const oidx = (y * w + x) * 4;
+        out.data[oidx] = fullData.data[gidx * 4];
+        out.data[oidx + 1] = fullData.data[gidx * 4 + 1];
+        out.data[oidx + 2] = fullData.data[gidx * 4 + 2];
+        out.data[oidx + 3] = fullData.data[gidx * 4 + 3];
+      }
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").putImageData(out, 0, 0);
+
+    // Claimed pixels come off the working canvas too, so they can't also
+    // get swept up by a later manual selection or an Analyze Regions pass.
+    s.fullCtx.save();
+    s.fullCtx.globalCompositeOperation = "destination-out";
+    s.fullCtx.drawImage(s.selectionCanvas, 0, 0);
+    s.fullCtx.restore();
+
+    if (!s.groups) s.groups = [];
+    const base = baseNameFor(s.file);
+    s.groups.push({
+      id: nextGroupId(),
+      canvas, x0, y0,
+      included: true,
+      isTitle: false,
+      filename: `${base} (Part ${s.groups.length + 1}).png`
+    });
+
+    s.selectionCtx.clearRect(0, 0, s.natW, s.natH);
+    redrawSplitDisplay();
+
+    document.getElementById("split-final").classList.add("hidden");
+    document.getElementById("split-editing-area").classList.remove("hidden");
+    document.getElementById("split-results").classList.remove("hidden");
     renderGroupsGrid();
   }
 
@@ -544,11 +679,9 @@
     const listEl = document.getElementById("split-final-list");
     listEl.innerHTML = "";
     included.forEach(g => {
-      const bbox = groupBBox(g);
-      const w = bbox.maxX - bbox.minX + 1, h = bbox.maxY - bbox.minY + 1;
       const row = document.createElement("div");
       row.className = "split-final-row";
-      row.innerHTML = `<span>${escapeHtml(g.filename || "(unnamed).png")}</span><span class="split-result-meta">${w}&times;${h}px</span>`;
+      row.innerHTML = `<span>${escapeHtml(g.filename || "(unnamed).png")}</span><span class="split-result-meta">${g.canvas.width}&times;${g.canvas.height}px</span>`;
       listEl.appendChild(row);
     });
 
@@ -561,17 +694,25 @@
     document.getElementById("split-editing-area").classList.remove("hidden");
   }
 
-  function titleCropForFinalize() {
-    const s = splitState;
-    const titleGroup = s.groups.find(g => g.isTitle);
-    return titleGroup ? cropGroupCanvas(titleGroup, 6).canvas : null;
+  // Draws the title group's own canvas onto a copy of g's canvas (never
+  // mutates g.canvas itself, since it's the group's canonical image and may
+  // still get merged, previewed, or exported again).
+  function finalCanvasFor(g, titleCanvas, titleGroupId) {
+    if (!titleCanvas || titleGroupId === g.id) return g.canvas;
+    const out = document.createElement("canvas");
+    out.width = g.canvas.width;
+    out.height = g.canvas.height;
+    const ctx = out.getContext("2d");
+    ctx.drawImage(g.canvas, 0, 0);
+    ctx.drawImage(titleCanvas, 15, 8);
+    return out;
   }
 
   function downloadSplitParts() {
     const s = splitState;
     if (!s || !s.groups) return;
-    const titleCanvas = titleCropForFinalize();
     const titleGroup = s.groups.find(g => g.isTitle);
+    const titleCanvas = titleGroup ? titleGroup.canvas : null;
 
     let delay = 0;
     s.groups.filter(g => g.included).forEach(g => {
@@ -579,10 +720,7 @@
       if (!filename) return;
       if (!/\.png$/i.test(filename)) filename += ".png";
 
-      const { canvas } = cropGroupCanvas(g, 30);
-      if (titleCanvas && (!titleGroup || titleGroup.id !== g.id)) {
-        canvas.getContext("2d").drawImage(titleCanvas, 15, 8);
-      }
+      const canvas = finalCanvasFor(g, titleCanvas, titleGroup && titleGroup.id);
       setTimeout(() => downloadCanvas(canvas, filename), delay);
       delay += 250;
     });
@@ -605,8 +743,8 @@
     const origWorldX = Math.round(nw.lng);
     const origWorldY = Math.round(-nw.lat);
 
-    const titleCanvas = titleCropForFinalize();
     const titleGroup = s.groups.find(g => g.isTitle);
+    const titleCanvas = titleGroup ? titleGroup.canvas : null;
 
     const virtual = loadVirtualPieces(s.realm);
     const hidden = loadHiddenOriginals(s.realm);
@@ -618,13 +756,9 @@
       if (!filename) return;
       if (!/\.png$/i.test(filename)) filename += ".png";
 
-      const { canvas, x0, y0 } = cropGroupCanvas(g, 30);
-      if (titleCanvas && (!titleGroup || titleGroup.id !== g.id)) {
-        canvas.getContext("2d").drawImage(titleCanvas, 15, 8);
-      }
-
+      const canvas = finalCanvasFor(g, titleCanvas, titleGroup && titleGroup.id);
       virtual[filename] = { width: canvas.width, height: canvas.height, dataUrl: canvas.toDataURL("image/png") };
-      layout[filename] = { x: origWorldX + x0, y: origWorldY + y0 };
+      layout[filename] = { x: origWorldX + g.x0, y: origWorldY + g.y0 };
       placedCount++;
     });
 
@@ -809,16 +943,22 @@
       canvas.addEventListener("mousedown", (e) => {
         if (!splitState) return;
         e.preventDefault();
-        splitState.undoStack.push(splitState.fullCtx.getImageData(0, 0, splitState.natW, splitState.natH));
+        const manual = document.getElementById("split-manual-mode").checked;
+        if (!manual) {
+          splitState.undoStack.push(splitState.fullCtx.getImageData(0, 0, splitState.natW, splitState.natH));
+        }
         splitState.drawing = true;
         last = splitCanvasPoint(e);
-        eraseAt(last[0], last[1], splitState.brushSize);
+        if (manual) paintSelectionAt(last[0], last[1], splitState.brushSize);
+        else eraseAt(last[0], last[1], splitState.brushSize);
         redrawSplitDisplay();
       });
       canvas.addEventListener("mousemove", (e) => {
         if (!splitState || !splitState.drawing) return;
+        const manual = document.getElementById("split-manual-mode").checked;
         const p = splitCanvasPoint(e);
-        eraseStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
+        if (manual) paintSelectionStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
+        else eraseStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
         last = p;
         redrawSplitDisplay();
       });
@@ -826,6 +966,14 @@
         if (splitState) splitState.drawing = false;
       });
     })();
+
+    document.getElementById("split-manual-mode").addEventListener("change", (e) => {
+      document.getElementById("split-erase-controls").classList.toggle("hidden", e.target.checked);
+      document.getElementById("split-manual-controls").classList.toggle("hidden", !e.target.checked);
+    });
+
+    document.getElementById("split-clear-selection-btn").addEventListener("click", clearManualSelection);
+    document.getElementById("split-add-manual-btn").addEventListener("click", addManualSelectionAsPiece);
 
     document.getElementById("split-brush-size").addEventListener("input", (e) => {
       if (splitState) splitState.brushSize = parseInt(e.target.value, 10);
@@ -841,6 +989,7 @@
       if (!splitState) return;
       splitState.fullCtx.clearRect(0, 0, splitState.natW, splitState.natH);
       splitState.fullCtx.drawImage(splitState.img, 0, 0);
+      splitState.selectionCtx.clearRect(0, 0, splitState.natW, splitState.natH);
       splitState.undoStack = [];
       splitState.groups = null;
       document.getElementById("split-results").classList.add("hidden");
