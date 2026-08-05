@@ -85,6 +85,143 @@
   let overlaysByFile = {};
   let activeDrag = null;
 
+  // ---- Group select ----
+  // Shift+click a piece to toggle it in/out of the selection; shift+drag an
+  // empty patch of map to box-select everything under it (replaces
+  // Leaflet's default shift-drag box ZOOM, which fights over the same
+  // gesture). Dragging any selected piece then moves the whole selection
+  // together. A plain click on an unselected piece drops the selection and
+  // drags just that one, same as before group select existed.
+  let selectedFiles = new Set();
+
+  function clearSelection() {
+    selectedFiles.forEach(f => {
+      const entry = overlaysByFile[f];
+      const el = entry && entry.overlay.getElement();
+      if (el) el.classList.remove("selected");
+    });
+    selectedFiles.clear();
+  }
+
+  function addToSelection(file) {
+    const entry = overlaysByFile[file];
+    if (!entry || selectedFiles.has(file)) return;
+    selectedFiles.add(file);
+    const el = entry.overlay.getElement();
+    if (el) el.classList.add("selected");
+  }
+
+  function toggleSelection(file) {
+    if (selectedFiles.has(file)) {
+      selectedFiles.delete(file);
+      const entry = overlaysByFile[file];
+      const el = entry && entry.overlay.getElement();
+      if (el) el.classList.remove("selected");
+    } else {
+      addToSelection(file);
+    }
+  }
+
+  // ---- Connector lines ----
+  // Straight horizontal/vertical/45deg lines that connect pieces too far
+  // apart to visually read as related, drawn directly over the assembled
+  // layout while you're still arranging it. They live in their own Leaflet
+  // pane with a z-index above every piece, so they're always on top and
+  // never get buried when pieces are reordered/re-added. Rendered
+  // non-interactive at all times -- while Draw Line is off that just means
+  // clicks pass through to the pieces underneath, same as if the lines
+  // weren't there; while it's on, drawing itself is driven from the
+  // piece/map-level mousedown handlers below, not from the lines themselves.
+  let lineDrawMode = false;
+  let activeLineDraw = null;
+  let linesLayerGroup = null;
+
+  function loadConnectorLines(realm) {
+    try {
+      return JSON.parse(localStorage.getItem("realmBuilderLines_" + realm) || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+  function saveConnectorLines(realm, lines) {
+    localStorage.setItem("realmBuilderLines_" + realm, JSON.stringify(lines));
+  }
+
+  function describeLineAngle(line) {
+    const dx = line.x2 - line.x1, dy = line.y2 - line.y1;
+    if (dy === 0) return "horizontal";
+    if (dx === 0) return "vertical";
+    return "45°";
+  }
+
+  function renderConnectorLines(realm) {
+    linesLayerGroup.clearLayers();
+    loadConnectorLines(realm).forEach(line => {
+      L.polyline(
+        [xyToLatLng(line.x1, line.y1), xyToLatLng(line.x2, line.y2)],
+        { color: "#ff5c5c", weight: 3, pane: "connectorLines", interactive: false }
+      ).addTo(linesLayerGroup);
+    });
+    refreshLineDropdown(realm);
+  }
+
+  function refreshLineDropdown(realm) {
+    const lines = loadConnectorLines(realm);
+    const select = document.getElementById("line-select");
+    select.innerHTML = lines
+      .map((l, i) => `<option value="${l.id}">Line ${i + 1} (${describeLineAngle(l)})</option>`)
+      .join("");
+    const has = lines.length > 0;
+    select.disabled = !has;
+    document.getElementById("line-remove-btn").disabled = !has;
+    document.getElementById("line-manage-controls").classList.toggle("hidden", !has);
+  }
+
+  // Rounds the drawn direction to the nearest 0/45/90/135 degrees (image
+  // pixel space, so this is exact for horizontal/vertical regardless of
+  // aspect ratio) while keeping the actual dragged distance.
+  function snapLineEnd(x0, y0, x1, y1) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const dist = Math.hypot(dx, dy);
+    if (dist === 0) return [x0, y0];
+    const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+    return [x0 + dist * Math.cos(angle), y0 + dist * Math.sin(angle)];
+  }
+
+  function startLineDrawAt(e) {
+    e.preventDefault();
+    const ll = map.mouseEventToLatLng(e);
+    activeLineDraw = { x0: ll.lng, y0: -ll.lat, previewLine: null, endX: undefined, endY: undefined };
+    map.dragging.disable();
+  }
+
+  function updateLineDrawTo(latlng) {
+    const d = activeLineDraw;
+    const [sx, sy] = snapLineEnd(d.x0, d.y0, latlng.lng, -latlng.lat);
+    d.endX = sx; d.endY = sy;
+    if (d.previewLine) map.removeLayer(d.previewLine);
+    d.previewLine = L.polyline(
+      [xyToLatLng(d.x0, d.y0), xyToLatLng(sx, sy)],
+      { color: "#ffd76c", weight: 3, dashArray: "6,6", pane: "connectorLines", interactive: false }
+    ).addTo(map);
+  }
+
+  function finishLineDraw() {
+    const d = activeLineDraw;
+    if (d.previewLine) map.removeLayer(d.previewLine);
+    activeLineDraw = null;
+    map.dragging.enable();
+    if (d.endX === undefined) return;
+    // A few pixels of world-space wobble on what was really just a click
+    // shouldn't save as a stray zero-length line.
+    if (Math.hypot(d.endX - d.x0, d.endY - d.y0) < 10) return;
+
+    const lines = loadConnectorLines(currentRealm);
+    lines.push({ id: Date.now() + Math.random(), x1: d.x0, y1: d.y0, x2: d.endX, y2: d.endY });
+    saveConnectorLines(currentRealm, lines);
+    renderConnectorLines(currentRealm);
+  }
+
   // ---- Split pieces (persisted locally, layered over the real manifest) ----
   // A split doesn't touch the real files -- it hides the original piece and
   // adds "virtual" pieces (in-memory PNGs stored as data URLs) in its place,
@@ -178,6 +315,10 @@
     );
   }
 
+  function xyToLatLng(x, y) {
+    return L.latLng(-y, x);
+  }
+
   function labelIcon(file) {
     return L.divIcon({
       className: "",
@@ -202,15 +343,32 @@
     el.classList.add("realm-piece-img");
     el.addEventListener("mousedown", (e) => {
       e.preventDefault();
+      e.stopPropagation(); // don't let this also reach the map's box-select/clear-selection handler
+      if (lineDrawMode) {
+        startLineDrawAt(e);
+        return;
+      }
       if (splitMode) {
         openSplitModal(currentRealm, file);
         return;
       }
+      if (e.shiftKey) {
+        toggleSelection(file);
+        return;
+      }
+      if (!selectedFiles.has(file)) clearSelection();
+
+      // Dragging a piece that's part of a multi-selection moves the whole
+      // group together, each from its own starting bounds.
+      const groupFiles = selectedFiles.size > 1 ? Array.from(selectedFiles) : null;
       activeDrag = {
         overlay,
         label,
         startLatLng: map.mouseEventToLatLng(e),
-        startBounds: overlay.getBounds()
+        startBounds: overlay.getBounds(),
+        groupStartBounds: groupFiles
+          ? Object.fromEntries(groupFiles.filter(f => overlaysByFile[f]).map(f => [f, overlaysByFile[f].overlay.getBounds()]))
+          : null
       };
       map.dragging.disable();
       el.classList.add("dragging");
@@ -830,7 +988,12 @@
       if (!/\.png$/i.test(filename)) filename += ".png";
 
       const canvas = finalCanvasFor(g, titleCanvas, titleGroup && titleGroup.id);
-      virtual[filename] = { width: canvas.width, height: canvas.height, dataUrl: canvas.toDataURL("image/png") };
+      virtual[filename] = {
+        width: canvas.width, height: canvas.height, dataUrl: canvas.toDataURL("image/png"),
+        // Tracks what this piece was cut from, so Restore Original can find
+        // and remove every part that came out of a given split.
+        sourceFile: s.file
+      };
       layout[filename] = { x: origWorldX + g.x0, y: origWorldY + g.y0 };
       placedCount++;
     });
@@ -855,10 +1018,55 @@
     }
   }
 
+  // Real (non-virtual) originals currently hidden by a split, for the
+  // current realm -- what "Restore Original" can offer to undo.
+  function hiddenRealOriginals(realm) {
+    const hidden = loadHiddenOriginals(realm);
+    const realFiles = new Set((REALM_PIECES[realm] || []).map(p => p.file));
+    return Array.from(hidden).filter(f => realFiles.has(f));
+  }
+
+  // Undoes placeSplitPartsLive for one original: un-hides it and removes
+  // every virtual piece whose sourceFile traces back to it (and any of
+  // THEIR virtual descendants, in case one of the parts was split again),
+  // so nothing from that split lingers behind after restoring.
+  function restoreOriginalPiece(realm, originalFile) {
+    const virtual = loadVirtualPieces(realm);
+    const hidden = loadHiddenOriginals(realm);
+    const layout = loadLayoutFromStorage(realm) || {};
+
+    const toRemove = new Set([originalFile]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      Object.entries(virtual).forEach(([vfile, v]) => {
+        if (toRemove.has(v.sourceFile) && !toRemove.has(vfile)) {
+          toRemove.add(vfile);
+          changed = true;
+        }
+      });
+    }
+    toRemove.forEach(f => {
+      if (f === originalFile) return; // the original itself gets restored, not deleted
+      delete virtual[f];
+      delete layout[f];
+    });
+
+    hidden.delete(originalFile);
+    const seedPos = (REALM_SEED_LAYOUT[realm] || {})[originalFile];
+    if (seedPos) layout[originalFile] = seedPos;
+    else delete layout[originalFile];
+
+    saveHiddenOriginals(realm, hidden);
+    saveVirtualPieces(realm, virtual);
+    saveLayoutToStorage(realm, layout);
+  }
+
   function renderRealm(realm, layoutOverride) {
     currentRealm = realm;
     pieceLayerGroup.clearLayers();
     overlaysByFile = {};
+    selectedFiles.clear();
     endActiveDrag();
 
     const pieces = effectivePieces(realm);
@@ -886,6 +1094,19 @@
     }
 
     updateStatus(`${pieces.length} pieces loaded for ${realm}.`);
+    refreshRestoreControls(realm);
+    renderConnectorLines(realm);
+  }
+
+  function refreshRestoreControls(realm) {
+    const select = document.getElementById("restore-select");
+    const btn = document.getElementById("restore-confirm-btn");
+    const options = hiddenRealOriginals(realm);
+    select.innerHTML = options.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(baseNameFor(f))}</option>`).join("");
+    const has = options.length > 0;
+    select.disabled = !has;
+    btn.disabled = !has;
+    document.getElementById("restore-controls").classList.toggle("hidden", !has);
   }
 
   function updateStatus(msg) {
@@ -945,16 +1166,44 @@
       // rendering, matching the main site's already-proven feel.
       zoomSnap: 0.25,
       zoomDelta: 1,
-      attributionControl: false
+      attributionControl: false,
+      // Replaced by our own group-select box below -- shift-drag now
+      // selects pieces instead of zooming into the dragged box.
+      boxZoom: false
     });
     map.setView([0, 0], -3);
 
     pieceLayerGroup = L.featureGroup().addTo(map);
 
+    // Dedicated pane sitting above every piece overlay/marker (default
+    // overlayPane is 400, markerPane 600) so connector lines always render
+    // on top regardless of piece stacking order, without needing to touch
+    // z-index on individual pieces.
+    map.createPane("connectorLines");
+    map.getPane("connectorLines").style.zIndex = 650;
+    linesLayerGroup = L.featureGroup().addTo(map);
+
     map.on("mousemove", (e) => {
+      if (activeLineDraw) {
+        updateLineDrawTo(e.latlng);
+        return;
+      }
       if (!activeDrag) return;
       const dx = e.latlng.lng - activeDrag.startLatLng.lng;
       const dy = e.latlng.lat - activeDrag.startLatLng.lat;
+      if (activeDrag.groupStartBounds) {
+        Object.entries(activeDrag.groupStartBounds).forEach(([file, b]) => {
+          const entry = overlaysByFile[file];
+          if (!entry) return;
+          const newBounds = L.latLngBounds(
+            [b.getSouth() + dy, b.getWest() + dx],
+            [b.getNorth() + dy, b.getEast() + dx]
+          );
+          entry.overlay.setBounds(newBounds);
+          entry.label.setLatLng(newBounds.getNorthWest());
+        });
+        return;
+      }
       const b = activeDrag.startBounds;
       const newBounds = L.latLngBounds(
         [b.getSouth() + dy, b.getWest() + dx],
@@ -963,8 +1212,62 @@
       activeDrag.overlay.setBounds(newBounds);
       activeDrag.label.setLatLng(newBounds.getNorthWest());
     });
-    map.on("mouseup", endActiveDrag);
-    map.getContainer().addEventListener("mouseleave", endActiveDrag);
+    map.on("mouseup", () => {
+      if (activeLineDraw) { finishLineDraw(); return; }
+      endActiveDrag();
+    });
+    map.getContainer().addEventListener("mouseleave", () => {
+      if (activeLineDraw) { finishLineDraw(); return; }
+      endActiveDrag();
+    });
+
+    // Shift+drag an empty patch of map to box-select every piece under it;
+    // a plain click on empty map clears the current selection (piece-level
+    // mousedown handlers stop propagation, so this only fires for clicks
+    // that land on the bare map).
+    (function initGroupSelectBox() {
+      let box = null;
+      map.getContainer().addEventListener("mousedown", (e) => {
+        if (lineDrawMode) {
+          startLineDrawAt(e);
+          return;
+        }
+        if (!e.shiftKey) {
+          clearSelection();
+          return;
+        }
+        e.preventDefault();
+        const rect = map.getContainer().getBoundingClientRect();
+        const startX = e.clientX - rect.left, startY = e.clientY - rect.top;
+        const rectEl = document.createElement("div");
+        rectEl.id = "realm-select-box";
+        map.getContainer().appendChild(rectEl);
+        box = { startX, startY, rectEl };
+        map.dragging.disable();
+      });
+      window.addEventListener("mousemove", (e) => {
+        if (!box) return;
+        const rect = map.getContainer().getBoundingClientRect();
+        const curX = e.clientX - rect.left, curY = e.clientY - rect.top;
+        const x0 = Math.min(box.startX, curX), x1 = Math.max(box.startX, curX);
+        const y0 = Math.min(box.startY, curY), y1 = Math.max(box.startY, curY);
+        Object.assign(box.rectEl.style, { left: x0 + "px", top: y0 + "px", width: (x1 - x0) + "px", height: (y1 - y0) + "px" });
+      });
+      window.addEventListener("mouseup", (e) => {
+        if (!box) return;
+        const rect = map.getContainer().getBoundingClientRect();
+        const curX = e.clientX - rect.left, curY = e.clientY - rect.top;
+        const x0 = Math.min(box.startX, curX), x1 = Math.max(box.startX, curX);
+        const y0 = Math.min(box.startY, curY), y1 = Math.max(box.startY, curY);
+        const selBounds = L.latLngBounds(map.containerPointToLatLng([x0, y0]), map.containerPointToLatLng([x1, y1]));
+        Object.entries(overlaysByFile).forEach(([file, entry]) => {
+          if (selBounds.intersects(entry.overlay.getBounds())) addToSelection(file);
+        });
+        box.rectEl.remove();
+        box = null;
+        map.dragging.enable();
+      });
+    })();
 
     document.getElementById("realm-select").addEventListener("change", (e) => {
       renderRealm(e.target.value);
@@ -1006,6 +1309,40 @@
     document.getElementById("split-mode-btn").addEventListener("click", (e) => {
       splitMode = !splitMode;
       e.target.classList.toggle("active", splitMode);
+      if (splitMode && lineDrawMode) {
+        lineDrawMode = false;
+        document.getElementById("line-draw-btn").classList.remove("active");
+      }
+    });
+
+    document.getElementById("line-draw-btn").addEventListener("click", (e) => {
+      lineDrawMode = !lineDrawMode;
+      e.target.classList.toggle("active", lineDrawMode);
+      if (lineDrawMode && splitMode) {
+        splitMode = false;
+        document.getElementById("split-mode-btn").classList.remove("active");
+      }
+      updateStatus(lineDrawMode
+        ? "Draw Line: drag from one piece toward another -- snaps to horizontal, vertical, or 45°."
+        : `${loadConnectorLines(currentRealm).length} line(s) saved for ${currentRealm}.`);
+    });
+
+    document.getElementById("line-remove-btn").addEventListener("click", () => {
+      const id = document.getElementById("line-select").value;
+      if (!id) return;
+      const lines = loadConnectorLines(currentRealm).filter(l => String(l.id) !== id);
+      saveConnectorLines(currentRealm, lines);
+      renderConnectorLines(currentRealm);
+    });
+
+    document.getElementById("restore-confirm-btn").addEventListener("click", () => {
+      const select = document.getElementById("restore-select");
+      const file = select.value;
+      if (!file) return;
+      const label = baseNameFor(file);
+      restoreOriginalPiece(currentRealm, file);
+      renderRealm(currentRealm);
+      updateStatus(`Restored ${label} and removed the parts it was split into.`);
     });
 
     document.getElementById("split-close-btn").addEventListener("click", closeSplitModal);

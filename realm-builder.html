@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Realm Builder — Land of Olmran</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/realm-builder.css?v=17">
+<link rel="stylesheet" href="css/realm-builder.css?v=19">
 </head>
 <body>
 
@@ -37,6 +37,15 @@
     <button id="export-btn" title="Copy layout data for all realms as JS">Copy Layout Data</button>
     <button id="fit-all-btn" title="Zoom out to see every piece">Fit All</button>
     <button id="split-mode-btn" title="Click a piece to cut it apart into separate, independently-draggable pieces">Split Piece</button>
+    <span id="restore-controls">
+      <select id="restore-select"></select>
+      <button id="restore-confirm-btn" title="Undo that split and remove the parts it produced">Restore Original</button>
+    </span>
+    <button id="line-draw-btn" title="Drag a horizontal, vertical, or 45° line connecting distant pieces -- always renders on top">Draw Line</button>
+    <span id="line-manage-controls" class="hidden">
+      <select id="line-select"></select>
+      <button id="line-remove-btn">Remove Line</button>
+    </span>
     <span id="builder-status"></span>
     <a id="back-link" href="index.html">Back to Map</a>
   </div>
@@ -93,9 +102,9 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/data/dev-accounts.js?v=18"></script>
-<script src="js/data/realm-pieces.js?v=18"></script>
-<script src="js/data/realm-seed-layout.js?v=18"></script>
-<script src="js/realm-builder.js?v=18"></script>
+<script src="js/data/dev-accounts.js?v=20"></script>
+<script src="js/data/realm-pieces.js?v=20"></script>
+<script src="js/data/realm-seed-layout.js?v=20"></script>
+<script src="js/realm-builder.js?v=20"></script>
 </body>
 </html>
