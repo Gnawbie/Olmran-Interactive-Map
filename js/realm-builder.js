@@ -404,13 +404,19 @@
     const s = splitState;
     s.displayCtx.clearRect(0, 0, s.displayCanvas.width, s.displayCanvas.height);
     s.displayCtx.drawImage(s.fullCanvas, 0, 0, s.displayCanvas.width, s.displayCanvas.height);
+    // The cut line itself, drawn as a bright solid overlay -- fullCanvas is
+    // never touched by drawing a cut, so this is the ONLY visual trace of
+    // where you've drawn. Needed because so much of a piece is transparent
+    // background now: a destructive erase there would be invisible, and an
+    // erase over real content would destroy it. See eraseAt().
+    s.displayCtx.drawImage(s.cutMaskCanvas, 0, 0, s.displayCanvas.width, s.displayCanvas.height);
   }
 
   function undoSplitStroke() {
     if (!splitState || splitState.undoStack.length === 0) return;
     const prev = splitState.undoStack.pop();
-    splitState.fullCtx.putImageData(prev.imageData, 0, 0);
     splitState.cutMask.set(prev.cutMask);
+    splitState.cutMaskCtx.putImageData(prev.cutMaskImageData, 0, 0);
     redrawSplitDisplay();
   }
 
@@ -454,14 +460,24 @@
       displayCanvas.height = Math.round(natH * baseScale);
       const displayCtx = displayCanvas.getContext("2d");
 
+      // Where the cut line is actually painted for display -- bright and
+      // solid so it reads clearly over both transparent background and
+      // real content, without ever touching fullCanvas's own pixels.
+      const cutMaskCanvas = document.createElement("canvas");
+      cutMaskCanvas.width = natW;
+      cutMaskCanvas.height = natH;
+      const cutMaskCtx = cutMaskCanvas.getContext("2d");
+      cutMaskCtx.fillStyle = "rgba(255, 60, 60, 0.85)";
+
       splitState = {
         realm, file, img, fullCanvas, fullCtx, displayCanvas, displayCtx,
+        cutMaskCanvas, cutMaskCtx,
         baseScale, scale: baseScale, zoom: 1, natW, natH,
         drawing: false, undoStack: [],
-        // Every pixel the brush has touched this editing session, tracked
-        // separately from fullCanvas's own transparency -- this is the
-        // "wall" splitAlongLine() cuts along, distinct from pixels that
-        // were simply always background.
+        // Every pixel the brush has touched this editing session -- the
+        // "wall" both splitAlongLine() and Analyze Regions treat as blocked,
+        // kept entirely separate from fullCanvas's real pixel data so
+        // drawing a cut can never destroy actual map content.
         cutMask: new Uint8Array(natW * natH),
         brushSize: parseInt(document.getElementById("split-brush-size").value, 10),
         groups: null, nextGroupId: 1, dragSourceGroupId: null
@@ -512,15 +528,15 @@
     return [Math.min(Math.max(x, 0), s.natW - 1), Math.min(Math.max(y, 0), s.natH - 1)];
   }
 
+  // Marks a cut point: paints the visible marker and flags the pixel mask,
+  // but never touches fullCanvas -- drawing a cut must not be able to
+  // destroy real map content (see the note on cutMask in openSplitModal).
   function eraseAt(x, y, radius) {
     const s = splitState;
-    const ctx = s.fullCtx;
-    ctx.save();
-    ctx.globalCompositeOperation = "destination-out";
+    const ctx = s.cutMaskCtx;
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
 
     const w = s.natW, h = s.natH, mask = s.cutMask;
     const cx = Math.round(x), cy = Math.round(y), r = Math.ceil(radius), r2 = radius * radius;
@@ -544,9 +560,11 @@
     }
   }
 
-  // Flood fill (iterative, 8-connected) over every non-transparent pixel to
-  // find each disconnected blob left after the dev's cuts.
-  function findComponents(imageData, w, h) {
+  // Flood fill (iterative, 8-connected) over every non-transparent,
+  // non-cut pixel to find each disconnected blob left after the dev's
+  // cuts. cutMask pixels block the fill exactly like drawn cuts always
+  // erased to do, but without ever having touched the real pixel data.
+  function findComponents(imageData, w, h, cutMask) {
     const data = imageData.data;
     const labels = new Int32Array(w * h);
     const stackX = new Int32Array(w * h);
@@ -554,10 +572,12 @@
     let nextLabel = 0;
     const components = [];
 
+    const blocked = (idx) => data[idx * 4 + 3] < 10 || (cutMask && cutMask[idx]);
+
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const idx = y * w + x;
-        if (labels[idx] !== 0 || data[idx * 4 + 3] < 10) continue;
+        if (labels[idx] !== 0 || blocked(idx)) continue;
 
         nextLabel++;
         let sp = 0;
@@ -577,7 +597,7 @@
             for (let nx = cx - 1; nx <= cx + 1; nx++) {
               if (nx < 0 || nx >= w) continue;
               const nidx = ny * w + nx;
-              if (labels[nidx] !== 0 || data[nidx * 4 + 3] < 10) continue;
+              if (labels[nidx] !== 0 || blocked(nidx)) continue;
               labels[nidx] = nextLabel;
               stackX[sp] = nx; stackY[sp] = ny; sp++;
             }
@@ -668,7 +688,7 @@
   function runSplitAnalysis() {
     const s = splitState;
     const imageData = s.fullCtx.getImageData(0, 0, s.natW, s.natH);
-    const { labels, components } = findComponents(imageData, s.natW, s.natH);
+    const { labels, components } = findComponents(imageData, s.natW, s.natH, s.cutMask);
     const minSize = Math.max(1, parseInt(document.getElementById("split-min-size").value, 10) || 150);
     let kept = components.filter(c => c.count >= minSize).sort((a, b) => b.count - a.count);
 
@@ -888,6 +908,7 @@
     // The whole canvas has now been divided into the two pieces above --
     // nothing meaningful is left to keep cutting on this working copy.
     s.fullCtx.clearRect(0, 0, w, h);
+    s.cutMaskCtx.clearRect(0, 0, w, h);
     s.cutMask.fill(0);
     s.undoStack = [];
     redrawSplitDisplay();
@@ -1354,8 +1375,8 @@
         if (!splitState) return;
         e.preventDefault();
         splitState.undoStack.push({
-          imageData: splitState.fullCtx.getImageData(0, 0, splitState.natW, splitState.natH),
-          cutMask: Uint8Array.from(splitState.cutMask)
+          cutMask: Uint8Array.from(splitState.cutMask),
+          cutMaskImageData: splitState.cutMaskCtx.getImageData(0, 0, splitState.natW, splitState.natH)
         });
         splitState.drawing = true;
         last = splitCanvasPoint(e);
@@ -1401,8 +1422,7 @@
 
     document.getElementById("split-clear-btn").addEventListener("click", () => {
       if (!splitState) return;
-      splitState.fullCtx.clearRect(0, 0, splitState.natW, splitState.natH);
-      splitState.fullCtx.drawImage(splitState.img, 0, 0);
+      splitState.cutMaskCtx.clearRect(0, 0, splitState.natW, splitState.natH);
       splitState.cutMask.fill(0);
       splitState.undoStack = [];
       splitState.groups = null;
