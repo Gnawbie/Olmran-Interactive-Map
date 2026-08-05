@@ -158,6 +158,12 @@ html, body {
   color: #16181f;
 }
 
+#scale-mode-btn.active {
+  background: #b48cff;
+  border-color: #b48cff;
+  color: #16181f;
+}
+
 #line-manage-controls {
   display: flex;
   align-items: center;
@@ -228,6 +234,11 @@ html, body {
 
 .realm-piece-img.selected {
   box-shadow: 0 0 0 3px #4ade56, 0 4px 14px rgba(0,0,0,0.5);
+}
+
+.realm-piece-img.scaling {
+  cursor: nwse-resize;
+  box-shadow: 0 0 0 3px #b48cff, 0 6px 20px rgba(0,0,0,0.6);
 }
 
 /* Shift-drag box-select rectangle, positioned in map-container pixel

@@ -85,6 +85,54 @@
   let overlaysByFile = {};
   let activeDrag = null;
 
+  // ---- Scale piece ----
+  // Toggle mode (mutually exclusive with Split Piece / Draw Line): while
+  // active, clicking a piece and dragging resizes it instead of moving it.
+  // Scaling is uniform (locked aspect ratio) and anchored at the piece's
+  // current top-left corner -- distance from that anchor to the cursor at
+  // mousedown is the "1x" baseline, and the ratio of current distance to
+  // that baseline drives the resize as you drag.
+  let scaleMode = false;
+  let activeScale = null;
+
+  function startScaleAt(e, overlay, label) {
+    const b = overlay.getBounds();
+    const anchorX = b.getWest(), anchorY = -b.getNorth();
+    const ll = map.mouseEventToLatLng(e);
+    const mx = ll.lng, my = -ll.lat;
+    activeScale = {
+      overlay, label, anchorX, anchorY,
+      initialDist: Math.max(1, Math.hypot(mx - anchorX, my - anchorY)),
+      w0: b.getEast() - b.getWest(),
+      h0: b.getNorth() - b.getSouth()
+    };
+    map.dragging.disable();
+    const el = overlay.getElement();
+    if (el) el.classList.add("scaling");
+  }
+
+  function updateActiveScaleTo(latlng) {
+    const s = activeScale;
+    const mx = latlng.lng, my = -latlng.lat;
+    const dist = Math.hypot(mx - s.anchorX, my - s.anchorY);
+    const factor = Math.min(10, Math.max(0.1, dist / s.initialDist));
+    const w = s.w0 * factor, h = s.h0 * factor;
+    const newBounds = L.latLngBounds(
+      [-(s.anchorY + h), s.anchorX],
+      [-s.anchorY, s.anchorX + w]
+    );
+    s.overlay.setBounds(newBounds);
+    s.label.setLatLng(newBounds.getNorthWest());
+  }
+
+  function endActiveScale() {
+    if (!activeScale) return;
+    const el = activeScale.overlay.getElement();
+    if (el) el.classList.remove("scaling");
+    activeScale = null;
+    map.dragging.enable();
+  }
+
   // ---- Group select ----
   // Shift+click a piece to toggle it in/out of the selection; shift+drag an
   // empty patch of map to box-select everything under it (replaces
@@ -302,16 +350,30 @@
   function currentLayout() {
     const layout = {};
     Object.entries(overlaysByFile).forEach(([file, entry]) => {
-      const nw = entry.overlay.getBounds().getNorthWest();
-      layout[file] = { x: Math.round(nw.lng), y: Math.round(-nw.lat) };
+      const b = entry.overlay.getBounds();
+      const nw = b.getNorthWest();
+      const pos = { x: Math.round(nw.lng), y: Math.round(-nw.lat) };
+      // Scale is derived by comparing the overlay's current rendered width
+      // back to the piece's native (unscaled) width, rather than tracked as
+      // its own separate piece of state -- so it's automatically correct
+      // right after a scale-drag with no extra bookkeeping, and simply
+      // absent (1) for every piece that's never been resized.
+      if (entry.nativeWidth) {
+        const w = b.getEast() - b.getWest();
+        const scale = Math.round((w / entry.nativeWidth) * 1000) / 1000;
+        if (Math.abs(scale - 1) > 0.001) pos.scale = scale;
+      }
+      layout[file] = pos;
     });
     return layout;
   }
 
   function boundsForPiece(pos, piece) {
+    const scale = pos.scale || 1;
+    const w = piece.width * scale, h = piece.height * scale;
     return L.latLngBounds(
-      [-(pos.y + piece.height), pos.x],
-      [-pos.y, pos.x + piece.width]
+      [-(pos.y + h), pos.x],
+      [-pos.y, pos.x + w]
     );
   }
 
@@ -350,6 +412,10 @@
       }
       if (splitMode) {
         openSplitModal(currentRealm, file);
+        return;
+      }
+      if (scaleMode) {
+        startScaleAt(e, overlay, label);
         return;
       }
       if (e.shiftKey) {
@@ -1107,7 +1173,7 @@
       pieceLayerGroup.addLayer(label);
 
       attachDragHandlers(overlay, label, piece.file);
-      overlaysByFile[piece.file] = { overlay, label };
+      overlaysByFile[piece.file] = { overlay, label, nativeWidth: piece.width, nativeHeight: piece.height };
     });
 
     if (pieceLayerGroup.getLayers().length > 0) {
@@ -1145,7 +1211,8 @@
       const entries = Object.entries(data[r]);
       lines.push(`  ${r}: [`);
       entries.forEach(([file, pos]) => {
-        lines.push(`    { file: ${JSON.stringify(file)}, x: ${Math.round(pos.x)}, y: ${Math.round(pos.y)} },`);
+        const scalePart = pos.scale ? `, scale: ${pos.scale}` : "";
+        lines.push(`    { file: ${JSON.stringify(file)}, x: ${Math.round(pos.x)}, y: ${Math.round(pos.y)}${scalePart} },`);
       });
       lines.push("  ],");
     });
@@ -1209,6 +1276,10 @@
         updateLineDrawTo(e.latlng);
         return;
       }
+      if (activeScale) {
+        updateActiveScaleTo(e.latlng);
+        return;
+      }
       if (!activeDrag) return;
       const dx = e.latlng.lng - activeDrag.startLatLng.lng;
       const dy = e.latlng.lat - activeDrag.startLatLng.lat;
@@ -1235,10 +1306,12 @@
     });
     map.on("mouseup", () => {
       if (activeLineDraw) { finishLineDraw(); return; }
+      if (activeScale) { endActiveScale(); return; }
       endActiveDrag();
     });
     map.getContainer().addEventListener("mouseleave", () => {
       if (activeLineDraw) { finishLineDraw(); return; }
+      if (activeScale) { endActiveScale(); return; }
       endActiveDrag();
     });
 
@@ -1327,25 +1400,46 @@
       }
     });
 
-    document.getElementById("split-mode-btn").addEventListener("click", (e) => {
-      splitMode = !splitMode;
-      e.target.classList.toggle("active", splitMode);
-      if (splitMode && lineDrawMode) {
+    // Split Piece / Draw Line / Scale Piece are mutually exclusive -- each
+    // repurposes a plain click-drag on a piece for something else, so only
+    // one can sensibly be active at a time.
+    function deactivateOtherModes(exceptMode) {
+      if (exceptMode !== "split" && splitMode) {
+        splitMode = false;
+        document.getElementById("split-mode-btn").classList.remove("active");
+      }
+      if (exceptMode !== "line" && lineDrawMode) {
         lineDrawMode = false;
         document.getElementById("line-draw-btn").classList.remove("active");
       }
+      if (exceptMode !== "scale" && scaleMode) {
+        scaleMode = false;
+        document.getElementById("scale-mode-btn").classList.remove("active");
+      }
+    }
+
+    document.getElementById("split-mode-btn").addEventListener("click", (e) => {
+      splitMode = !splitMode;
+      e.target.classList.toggle("active", splitMode);
+      if (splitMode) deactivateOtherModes("split");
     });
 
     document.getElementById("line-draw-btn").addEventListener("click", (e) => {
       lineDrawMode = !lineDrawMode;
       e.target.classList.toggle("active", lineDrawMode);
-      if (lineDrawMode && splitMode) {
-        splitMode = false;
-        document.getElementById("split-mode-btn").classList.remove("active");
-      }
+      if (lineDrawMode) deactivateOtherModes("line");
       updateStatus(lineDrawMode
         ? "Draw Line: drag from one piece toward another -- snaps to horizontal, vertical, or 45°."
         : `${loadConnectorLines(currentRealm).length} line(s) saved for ${currentRealm}.`);
+    });
+
+    document.getElementById("scale-mode-btn").addEventListener("click", (e) => {
+      scaleMode = !scaleMode;
+      e.target.classList.toggle("active", scaleMode);
+      if (scaleMode) deactivateOtherModes("scale");
+      updateStatus(scaleMode
+        ? "Scale Piece: click and drag a piece to resize it (uniform, anchored at its top-left)."
+        : `${currentRealm}: scaling done.`);
     });
 
     document.getElementById("line-remove-btn").addEventListener("click", () => {
