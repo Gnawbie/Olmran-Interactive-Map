@@ -348,8 +348,6 @@ html, body {
   border: 1px solid #3a3f4b;
   border-radius: 6px;
   display: flex;
-  align-items: center;
-  justify-content: center;
   /* auto, not hidden -- zooming in can make the canvas bigger than this
      box, and native scrollbars are how you pan around at that point (kept
      deliberately separate from the draw-a-line drag gesture). At fit zoom
@@ -362,6 +360,14 @@ html, body {
 #split-canvas {
   cursor: crosshair;
   display: block;
+  /* Centers the canvas when it's smaller than the wrap (fit zoom) without
+     the align-items/justify-content: center that used to be on the wrap --
+     centering a flex child that WAY, rather than with the child's own
+     auto margins, breaks scrolling to the start (top/left) side once the
+     child overflows: the browser only ever grows scrollable range toward
+     the end, so the top/bottom (or left/right) you'd centered off-screen
+     became permanently unreachable at any zoom past fit. */
+  margin: auto;
   background:
     linear-gradient(45deg, #2a2d35 25%, transparent 25%),
     linear-gradient(-45deg, #2a2d35 25%, transparent 25%),
