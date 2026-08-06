@@ -404,6 +404,12 @@
     if (!el) return;
     el.classList.add("realm-piece-img");
     el.addEventListener("mousedown", (e) => {
+      // Ctrl+click ignores this piece entirely and lets the mousedown fall
+      // through to the map -- Leaflet's own dragging (never disabled except
+      // during our own drag/scale/line operations) then pans the view
+      // exactly as if you'd clicked empty background, regardless of what's
+      // actually under the cursor.
+      if (e.ctrlKey) return;
       e.preventDefault();
       e.stopPropagation(); // don't let this also reach the map's box-select/clear-selection handler
       if (lineDrawMode) {
@@ -1322,6 +1328,11 @@
     (function initGroupSelectBox() {
       let box = null;
       map.getContainer().addEventListener("mousedown", (e) => {
+        // Ctrl+click always just pans -- skips line-draw/box-select/
+        // clear-selection so there's one gesture that's never going to do
+        // anything but move the view, no matter what mode is active or
+        // what's under the cursor.
+        if (e.ctrlKey) return;
         if (lineDrawMode) {
           startLineDrawAt(e);
           return;
