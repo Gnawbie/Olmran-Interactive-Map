@@ -86,6 +86,7 @@ html, body {
   height: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 #toolbar {
@@ -212,15 +213,20 @@ html, body {
   min-width: 160px;
 }
 
-#back-link {
+#back-link,
+#delete-btn {
   font-size: 12px;
   color: #8ea0d0;
   text-decoration: none;
   border: 1px solid #444a58;
   padding: 6px 12px;
   border-radius: 6px;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
 }
-#back-link:hover { background: #2a2f3a; }
+#back-link:hover,
+#delete-btn:hover { background: #2a2f3a; }
 
 /* ---- Map canvas ----
    Background color matches PIECE_BACKGROUND_COLOR (js/data/piece-style.js)
@@ -235,6 +241,110 @@ html, body {
     linear-gradient(rgba(0,0,0,0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0,0,0,0.06) 1px, transparent 1px);
   background-size: 100px 100px;
+}
+
+/* ---- Zone panel (floating over the map) ---- */
+#zone-panel {
+  position: absolute;
+  top: 74px;
+  right: 16px;
+  width: 260px;
+  max-height: calc(100% - 100px);
+  display: flex;
+  flex-direction: column;
+  background: rgba(24, 27, 34, 0.95);
+  border: 1px solid #444a58;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  z-index: 500;
+  overflow: hidden;
+}
+
+#zone-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #20242e;
+  border-bottom: 1px solid #444a58;
+  cursor: default;
+}
+
+#zone-panel-title {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+#zone-panel-toggle {
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0ead9;
+  cursor: pointer;
+  font-size: 14px;
+}
+#zone-panel-toggle:hover { background: #2a2f3a; }
+
+#zone-panel-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px;
+  gap: 8px;
+}
+
+#zone-panel.collapsed #zone-panel-body { display: none; }
+
+#zone-search {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #14161c;
+  color: #f0f0f0;
+  font-size: 13px;
+  width: 100%;
+}
+
+#zone-list {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.zone-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 4px;
+  border-bottom: 1px solid #262a34;
+  font-size: 12px;
+}
+.zone-row:last-child { border-bottom: none; }
+
+.zone-row-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f0ead9;
+}
+
+.zone-row-checks {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.zone-check {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.zone-row-flash {
+  background: rgba(255, 215, 108, 0.25);
 }
 
 /* ---- Draggable piece images ----

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Realm Builder — Land of Olmran</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/realm-builder.css?v=22">
+<link rel="stylesheet" href="css/realm-builder.css?v=23">
 </head>
 <body>
 
@@ -39,7 +39,7 @@
     <button id="split-mode-btn" title="Click a piece to cut it apart into separate, independently-draggable pieces">Split Piece</button>
     <span id="restore-controls">
       <select id="restore-select"></select>
-      <button id="restore-confirm-btn" title="Undo that split and remove the parts it produced">Restore Original</button>
+      <button id="restore-confirm-btn" title="Undo that split, or bring back a deleted piece">Restore</button>
     </span>
     <button id="line-draw-btn" title="Drag a horizontal, vertical, or 45° line connecting distant pieces -- always renders on top">Draw Line</button>
     <select id="line-color-select" title="Color used for the next line you draw">
@@ -53,9 +53,21 @@
     </span>
     <button id="scale-mode-btn" title="Click a piece and drag to resize it, uniformly, anchored at its top-left corner">Scale Piece</button>
     <span id="builder-status"></span>
+    <button id="delete-btn" title="Remove the selected piece(s) from view -- not a permanent delete, restore them from the Restore dropdown">Delete</button>
     <a id="back-link" href="index.html">Back to Map</a>
   </div>
   <div id="map"></div>
+
+  <div id="zone-panel">
+    <div id="zone-panel-header">
+      <span id="zone-panel-title">Zones</span>
+      <button id="zone-panel-toggle" title="Collapse/expand">&minus;</button>
+    </div>
+    <div id="zone-panel-body">
+      <input id="zone-search" type="text" placeholder="Search zones...">
+      <div id="zone-list"></div>
+    </div>
+  </div>
 </div>
 
 <div id="split-modal" class="hidden">
@@ -108,9 +120,9 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/data/dev-accounts.js?v=26"></script>
-<script src="js/data/realm-pieces.js?v=26"></script>
-<script src="js/data/realm-seed-layout.js?v=26"></script>
-<script src="js/realm-builder.js?v=26"></script>
+<script src="js/data/dev-accounts.js?v=27"></script>
+<script src="js/data/realm-pieces.js?v=27"></script>
+<script src="js/data/realm-seed-layout.js?v=27"></script>
+<script src="js/realm-builder.js?v=27"></script>
 </body>
 </html>

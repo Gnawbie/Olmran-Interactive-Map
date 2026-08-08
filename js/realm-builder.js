@@ -341,11 +341,36 @@
       return false; // most likely quota exceeded -- data URLs are not small
     }
   }
+
+  // "Deleted" pieces (via the Delete button) are just hidden from view, same
+  // idea as a split's hidden original but kept in a separate store since
+  // it's a distinct action to undo -- a delete never touches virtual/layout
+  // data, so restoring one is a plain removal from this set, not the more
+  // involved split-descendant cleanup restoreOriginalPiece does.
+  function loadDeletedPieces(realm) {
+    try {
+      return new Set(JSON.parse(localStorage.getItem("realmBuilderDeleted_" + realm) || "[]"));
+    } catch (e) {
+      return new Set();
+    }
+  }
+  function saveDeletedPieces(realm, set) {
+    localStorage.setItem("realmBuilderDeleted_" + realm, JSON.stringify(Array.from(set)));
+  }
+  function restoreDeletedPiece(realm, file) {
+    const deleted = loadDeletedPieces(realm);
+    deleted.delete(file);
+    saveDeletedPieces(realm, deleted);
+  }
+
   function effectivePieces(realm) {
     const hidden = loadHiddenOriginals(realm);
+    const deleted = loadDeletedPieces(realm);
     const virtual = loadVirtualPieces(realm);
-    const real = (REALM_PIECES[realm] || []).filter(p => !hidden.has(p.file));
-    const virtualList = Object.entries(virtual).map(([file, v]) => ({ file, width: v.width, height: v.height, isVirtual: true }));
+    const real = (REALM_PIECES[realm] || []).filter(p => !hidden.has(p.file) && !deleted.has(p.file));
+    const virtualList = Object.entries(virtual)
+      .filter(([file]) => !deleted.has(file))
+      .map(([file, v]) => ({ file, width: v.width, height: v.height, isVirtual: true }));
     return real.concat(virtualList);
   }
 
@@ -1243,13 +1268,18 @@
     updateStatus(`${pieces.length} pieces loaded for ${realm}.`);
     refreshRestoreControls(realm);
     renderConnectorLines(realm);
+    renderZonePanel(realm);
   }
 
   function refreshRestoreControls(realm) {
     const select = document.getElementById("restore-select");
     const btn = document.getElementById("restore-confirm-btn");
-    const options = hiddenRealOriginals(realm);
-    select.innerHTML = options.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(baseNameFor(f))}</option>`).join("");
+    const splitOptions = hiddenRealOriginals(realm)
+      .map(f => ({ value: f, label: `${baseNameFor(f)} (split)` }));
+    const deleteOptions = Array.from(loadDeletedPieces(realm))
+      .map(f => ({ value: "deleted:" + f, label: `${baseNameFor(f)} (deleted)` }));
+    const options = splitOptions.concat(deleteOptions);
+    select.innerHTML = options.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("");
     const has = options.length > 0;
     select.disabled = !has;
     btn.disabled = !has;
@@ -1258,6 +1288,99 @@
 
   function updateStatus(msg) {
     document.getElementById("builder-status").textContent = msg;
+  }
+
+  // ---- Zone panel (floating list of every zone currently on the map) ----
+  // A "zone" is one entry from REALM_PIECES -- its own original file name.
+  // Splitting it doesn't create new zones, it just changes how many live
+  // pieces that zone currently has (tracked here by tracing each live
+  // virtual piece's immediate sourceFile back to the real original; nested
+  // re-splits of a split-off part aren't tracked past that one hop, since
+  // that's also the limit of what the split data model itself retains).
+  function collectZones(realm) {
+    const virtual = loadVirtualPieces(realm);
+    const byRoot = {};
+    effectivePieces(realm).forEach(p => {
+      const root = p.isVirtual ? ((virtual[p.file] && virtual[p.file].sourceFile) || p.file) : p.file;
+      (byRoot[root] || (byRoot[root] = [])).push(p.file);
+    });
+    return (REALM_PIECES[realm] || [])
+      .map(piece => piece.file)
+      .filter(root => byRoot[root] && byRoot[root].length > 0)
+      .map(root => ({ root, label: baseNameFor(root), pieces: byRoot[root] }));
+  }
+
+  function renderZonePanel(realm) {
+    const zones = collectZones(realm);
+    const listEl = document.getElementById("zone-list");
+    listEl.innerHTML = zones.map(z => {
+      const checks = z.pieces.map(f =>
+        `<label class="zone-check" title="${escapeHtml(baseNameFor(f))}"><input type="checkbox" data-root="${escapeHtml(z.root)}" data-file="${escapeHtml(f)}"></label>`
+      ).join("");
+      return `<div class="zone-row" data-root="${escapeHtml(z.root)}"><span class="zone-row-label" title="${escapeHtml(z.label)}">${escapeHtml(z.label)}</span><span class="zone-row-checks">${checks}</span></div>`;
+    }).join("");
+  }
+
+  function jumpToPieces(files) {
+    const bounds = files.map(f => overlaysByFile[f] && overlaysByFile[f].overlay.getBounds()).filter(Boolean);
+    if (bounds.length === 0) return;
+    const combined = bounds[0];
+    bounds.slice(1).forEach(b => combined.extend(b));
+    map.fitBounds(combined, { padding: [100, 100], animate: true });
+  }
+
+  function flashZoneRow(root) {
+    const row = document.querySelector(`.zone-row[data-root="${cssEscape(root)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: "nearest" });
+    row.classList.add("zone-row-flash");
+    setTimeout(() => row.classList.remove("zone-row-flash"), 1200);
+  }
+
+  function cssEscape(s) {
+    return window.CSS && CSS.escape ? CSS.escape(s) : s.replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+  }
+
+  // Plain Levenshtein edit distance, used to tolerate typos in the zone
+  // search box -- small inputs only (zone names/words), so the classic
+  // O(n*m) DP table is more than fast enough.
+  function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    const row = new Array(n + 1);
+    for (let j = 0; j <= n; j++) row[j] = j;
+    for (let i = 1; i <= m; i++) {
+      let prev = row[0];
+      row[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const tmp = row[j];
+        row[j] = a[i - 1] === b[j - 1]
+          ? prev
+          : 1 + Math.min(prev, row[j], row[j - 1]);
+        prev = tmp;
+      }
+    }
+    return row[n];
+  }
+
+  function findZoneForSearch(realm, query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    const zones = collectZones(realm);
+    const substringMatch = zones.find(z => z.label.toLowerCase().includes(q));
+    if (substringMatch) return substringMatch;
+
+    let best = null, bestDist = Infinity;
+    zones.forEach(z => {
+      const label = z.label.toLowerCase();
+      let dist = levenshtein(q, label);
+      label.split(/\s+/).forEach(word => { dist = Math.min(dist, levenshtein(q, word)); });
+      if (dist < bestDist) { bestDist = dist; best = z; }
+    });
+    // Reject matches too far off to plausibly be a typo of what was typed.
+    if (best && bestDist > Math.max(3, Math.ceil(q.length * 0.5))) return null;
+    return best;
   }
 
   function formatLayoutFileAllRealms() {
@@ -1527,14 +1650,77 @@
 
     document.getElementById("line-undo-btn").addEventListener("click", undoLineAction);
 
+    document.getElementById("delete-btn").addEventListener("click", () => {
+      if (selectedFiles.size === 0) {
+        updateStatus("Select a piece (or pieces) first, then click Delete.");
+        return;
+      }
+      const deleted = loadDeletedPieces(currentRealm);
+      const count = selectedFiles.size;
+      selectedFiles.forEach(f => deleted.add(f));
+      saveDeletedPieces(currentRealm, deleted);
+      clearSelection();
+      renderRealm(currentRealm);
+      updateStatus(`Removed ${count} piece(s) from view -- not permanent, restore them from the "Restore" dropdown.`);
+    });
+
     document.getElementById("restore-confirm-btn").addEventListener("click", () => {
       const select = document.getElementById("restore-select");
-      const file = select.value;
-      if (!file) return;
-      const label = baseNameFor(file);
-      restoreOriginalPiece(currentRealm, file);
+      const value = select.value;
+      if (!value) return;
+      if (value.startsWith("deleted:")) {
+        const file = value.slice("deleted:".length);
+        restoreDeletedPiece(currentRealm, file);
+        renderRealm(currentRealm);
+        updateStatus(`Restored ${baseNameFor(file)}.`);
+        return;
+      }
+      const label = baseNameFor(value);
+      restoreOriginalPiece(currentRealm, value);
       renderRealm(currentRealm);
       updateStatus(`Restored ${label} and removed the parts it was split into.`);
+    });
+
+    document.getElementById("zone-panel-toggle").addEventListener("click", () => {
+      const panel = document.getElementById("zone-panel");
+      const collapsed = panel.classList.toggle("collapsed");
+      document.getElementById("zone-panel-toggle").textContent = collapsed ? "+" : "−";
+    });
+
+    document.getElementById("zone-search").addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      const zone = findZoneForSearch(currentRealm, e.target.value);
+      if (!zone) {
+        updateStatus(`No zone matching "${e.target.value}" found.`);
+        return;
+      }
+      flashZoneRow(zone.root);
+      jumpToPieces(zone.pieces);
+    });
+
+    document.getElementById("zone-list").addEventListener("change", (e) => {
+      const checkbox = e.target;
+      if (checkbox.tagName !== "INPUT") return;
+      const root = checkbox.dataset.root;
+      const file = checkbox.dataset.file;
+      if (checkbox.checked) {
+        // Only one piece of a given zone can be "checked" at a time -- these
+        // act as a per-row radio group, picking which part of a split zone
+        // to jump to.
+        document.querySelectorAll(`#zone-list input[data-root="${cssEscape(root)}"]`).forEach(cb => {
+          if (cb !== checkbox) cb.checked = false;
+        });
+        clearSelection();
+        addToSelection(file);
+        jumpToPieces([file]);
+      } else {
+        if (selectedFiles.has(file)) {
+          selectedFiles.delete(file);
+          const entry = overlaysByFile[file];
+          const el = entry && entry.overlay.getElement();
+          if (el) el.classList.remove("selected");
+        }
+      }
     });
 
     document.getElementById("split-close-btn").addEventListener("click", closeSplitModal);
