@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Realm Builder — Land of Olmran</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/realm-builder.css?v=21">
+<link rel="stylesheet" href="css/realm-builder.css?v=22">
 </head>
 <body>
 
@@ -42,6 +42,11 @@
       <button id="restore-confirm-btn" title="Undo that split and remove the parts it produced">Restore Original</button>
     </span>
     <button id="line-draw-btn" title="Drag a horizontal, vertical, or 45° line connecting distant pieces -- always renders on top">Draw Line</button>
+    <select id="line-color-select" title="Color used for the next line you draw">
+      <option value="red" selected>Red</option>
+      <option value="black">Black</option>
+    </select>
+    <button id="line-undo-btn" title="Undo the last Draw Line tool action (draw or remove)" disabled>Undo</button>
     <span id="line-manage-controls" class="hidden">
       <select id="line-select"></select>
       <button id="line-remove-btn">Remove Line</button>
@@ -103,9 +108,9 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/data/dev-accounts.js?v=25"></script>
-<script src="js/data/realm-pieces.js?v=25"></script>
-<script src="js/data/realm-seed-layout.js?v=25"></script>
-<script src="js/realm-builder.js?v=25"></script>
+<script src="js/data/dev-accounts.js?v=26"></script>
+<script src="js/data/realm-pieces.js?v=26"></script>
+<script src="js/data/realm-seed-layout.js?v=26"></script>
+<script src="js/realm-builder.js?v=26"></script>
 </body>
 </html>

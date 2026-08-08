@@ -184,6 +184,23 @@
   let activeLineDraw = null;
   let linesLayerGroup = null;
 
+  // Color the *next drawn* line uses -- switchable via the toolbar dropdown,
+  // red by default. Saved onto each line so past lines keep their own color
+  // even after this selection changes.
+  const LINE_COLORS = { red: "#ff5c5c", black: "#222222" };
+  let lineColorChoice = "red";
+
+  // Which line was most recently drawn or picked in the dropdown, so the
+  // dropdown can default back to it (rather than always snapping to the
+  // first line) after any redraw -- reset per realm switch.
+  let lastUsedLineId = null;
+
+  // Snapshot-based undo, scoped to the current realm -- covers every
+  // mutating line-tool action (draw, remove, and anything added later) by
+  // pushing a full copy of the line list before the mutation rather than
+  // tracking each action type individually.
+  let lineUndoStack = [];
+
   function loadConnectorLines(realm) {
     try {
       return JSON.parse(localStorage.getItem("realmBuilderLines_" + realm) || "[]");
@@ -193,6 +210,21 @@
   }
   function saveConnectorLines(realm, lines) {
     localStorage.setItem("realmBuilderLines_" + realm, JSON.stringify(lines));
+  }
+
+  function pushLineUndoSnapshot(realm) {
+    lineUndoStack.push(JSON.stringify(loadConnectorLines(realm)));
+    if (lineUndoStack.length > 50) lineUndoStack.shift();
+    document.getElementById("line-undo-btn").disabled = false;
+  }
+
+  function undoLineAction() {
+    if (lineUndoStack.length === 0) return;
+    const prev = JSON.parse(lineUndoStack.pop());
+    saveConnectorLines(currentRealm, prev);
+    if (prev.length) lastUsedLineId = prev[prev.length - 1].id;
+    renderConnectorLines(currentRealm);
+    document.getElementById("line-undo-btn").disabled = lineUndoStack.length === 0;
   }
 
   function describeLineAngle(line) {
@@ -207,7 +239,7 @@
     loadConnectorLines(realm).forEach(line => {
       L.polyline(
         [xyToLatLng(line.x1, line.y1), xyToLatLng(line.x2, line.y2)],
-        { color: "#ff5c5c", weight: 1, pane: "connectorLines", interactive: false }
+        { color: LINE_COLORS[line.color] || line.color || LINE_COLORS.red, weight: 1, pane: "connectorLines", interactive: false }
       ).addTo(linesLayerGroup);
     });
     refreshLineDropdown(realm);
@@ -217,12 +249,17 @@
     const lines = loadConnectorLines(realm);
     const select = document.getElementById("line-select");
     select.innerHTML = lines
-      .map((l, i) => `<option value="${l.id}">Line ${i + 1} (${describeLineAngle(l)})</option>`)
+      .map((l, i) => `<option value="${l.id}">Line ${i + 1} (${describeLineAngle(l)}, ${l.color === "black" ? "black" : "red"})</option>`)
       .join("");
     const has = lines.length > 0;
     select.disabled = !has;
     document.getElementById("line-remove-btn").disabled = !has;
     document.getElementById("line-manage-controls").classList.toggle("hidden", !has);
+    if (has) {
+      const match = lines.some(l => String(l.id) === String(lastUsedLineId));
+      select.value = match ? String(lastUsedLineId) : String(lines[lines.length - 1].id);
+    }
+    document.getElementById("line-undo-btn").disabled = lineUndoStack.length === 0;
   }
 
   // Rounds the drawn direction to the nearest 0/45/90/135 degrees (image
@@ -264,9 +301,12 @@
     // shouldn't save as a stray zero-length line.
     if (Math.hypot(d.endX - d.x0, d.endY - d.y0) < 10) return;
 
+    pushLineUndoSnapshot(currentRealm);
     const lines = loadConnectorLines(currentRealm);
-    lines.push({ id: Date.now() + Math.random(), x1: d.x0, y1: d.y0, x2: d.endX, y2: d.endY });
+    const id = Date.now() + Math.random();
+    lines.push({ id, x1: d.x0, y1: d.y0, x2: d.endX, y2: d.endY, color: lineColorChoice });
     saveConnectorLines(currentRealm, lines);
+    lastUsedLineId = id;
     renderConnectorLines(currentRealm);
   }
 
@@ -1169,6 +1209,8 @@
 
   function renderRealm(realm, layoutOverride) {
     currentRealm = realm;
+    lineUndoStack = [];
+    lastUsedLineId = null;
     pieceLayerGroup.clearLayers();
     overlaysByFile = {};
     selectedFiles.clear();
@@ -1468,10 +1510,22 @@
     document.getElementById("line-remove-btn").addEventListener("click", () => {
       const id = document.getElementById("line-select").value;
       if (!id) return;
+      pushLineUndoSnapshot(currentRealm);
       const lines = loadConnectorLines(currentRealm).filter(l => String(l.id) !== id);
       saveConnectorLines(currentRealm, lines);
+      lastUsedLineId = lines.length ? lines[lines.length - 1].id : null;
       renderConnectorLines(currentRealm);
     });
+
+    document.getElementById("line-select").addEventListener("change", (e) => {
+      lastUsedLineId = e.target.value;
+    });
+
+    document.getElementById("line-color-select").addEventListener("change", (e) => {
+      lineColorChoice = e.target.value;
+    });
+
+    document.getElementById("line-undo-btn").addEventListener("click", undoLineAction);
 
     document.getElementById("restore-confirm-btn").addEventListener("click", () => {
       const select = document.getElementById("restore-select");

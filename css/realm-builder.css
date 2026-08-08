@@ -185,6 +185,26 @@ html, body {
   color: #ff5c5c;
 }
 
+#line-color-select {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #444a58;
+  background: #20242e;
+  color: #f0f0f0;
+  font-size: 13px;
+}
+
+#line-undo-btn {
+  border-color: #8ea0d0;
+  color: #8ea0d0;
+}
+
+#toolbar button:disabled,
+#toolbar select:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 #builder-status {
   font-size: 12px;
   color: #8ea0d0;
