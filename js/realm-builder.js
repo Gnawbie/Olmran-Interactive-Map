@@ -207,7 +207,7 @@
     loadConnectorLines(realm).forEach(line => {
       L.polyline(
         [xyToLatLng(line.x1, line.y1), xyToLatLng(line.x2, line.y2)],
-        { color: "#ff5c5c", weight: 3, pane: "connectorLines", interactive: false }
+        { color: "#ff5c5c", weight: 1, pane: "connectorLines", interactive: false }
       ).addTo(linesLayerGroup);
     });
     refreshLineDropdown(realm);
@@ -250,7 +250,7 @@
     if (d.previewLine) map.removeLayer(d.previewLine);
     d.previewLine = L.polyline(
       [xyToLatLng(d.x0, d.y0), xyToLatLng(sx, sy)],
-      { color: "#ffd76c", weight: 3, dashArray: "6,6", pane: "connectorLines", interactive: false }
+      { color: "#ffd76c", weight: 1, dashArray: "6,6", pane: "connectorLines", interactive: false }
     ).addTo(map);
   }
 
