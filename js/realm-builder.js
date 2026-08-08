@@ -493,6 +493,11 @@
   }
 
   function openSplitModal(realm, file) {
+    // Autosave the current layout right before editing starts -- a safety
+    // net so whatever arranging was done up to this point survives even if
+    // the split session doesn't end cleanly.
+    saveLayoutToStorage(realm, currentLayout());
+
     const virtual = loadVirtualPieces(realm);
     const isVirtual = !!virtual[file];
 
@@ -587,6 +592,13 @@
   function closeSplitModal() {
     document.getElementById("split-modal").classList.add("hidden");
     splitState = null;
+    // One click of Split Piece is for splitting one piece -- turning the
+    // mode off here means it never stays armed by accident for whatever
+    // you click next, whether this close was a cancel or a completed split.
+    if (splitMode) {
+      splitMode = false;
+      document.getElementById("split-mode-btn").classList.remove("active");
+    }
   }
 
   function splitCanvasPoint(e) {
@@ -1476,9 +1488,23 @@
     (function initSplitCanvasEvents() {
       const canvas = document.getElementById("split-canvas");
       let last = null;
+      let panState = null;
+
       canvas.addEventListener("mousedown", (e) => {
         if (!splitState) return;
         e.preventDefault();
+        // Ctrl+click pans the split canvas (scrolls the wrap) instead of
+        // drawing -- same escape hatch as Ctrl+click on the main map,
+        // useful once you're zoomed in past fit and scrollbars alone are
+        // fiddly to grab precisely.
+        if (e.ctrlKey) {
+          const wrap = document.getElementById("split-canvas-wrap");
+          panState = {
+            startClientX: e.clientX, startClientY: e.clientY,
+            startScrollLeft: wrap.scrollLeft, startScrollTop: wrap.scrollTop
+          };
+          return;
+        }
         splitState.undoStack.push({
           cutMask: Uint8Array.from(splitState.cutMask),
           cutMaskImageData: splitState.cutMaskCtx.getImageData(0, 0, splitState.natW, splitState.natH)
@@ -1493,6 +1519,12 @@
       // canvas-scoped listener simply stops receiving events at that point,
       // cutting the stroke short right when you need it to reach the edge.
       window.addEventListener("mousemove", (e) => {
+        if (panState) {
+          const wrap = document.getElementById("split-canvas-wrap");
+          wrap.scrollLeft = panState.startScrollLeft - (e.clientX - panState.startClientX);
+          wrap.scrollTop = panState.startScrollTop - (e.clientY - panState.startClientY);
+          return;
+        }
         if (!splitState || !splitState.drawing) return;
         const p = splitCanvasPoint(e);
         eraseStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
@@ -1500,6 +1532,7 @@
         redrawSplitDisplay();
       });
       window.addEventListener("mouseup", () => {
+        panState = null;
         if (splitState) splitState.drawing = false;
       });
     })();
