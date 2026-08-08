@@ -363,6 +363,23 @@
     saveDeletedPieces(realm, deleted);
   }
 
+  // Locked pieces (toggled from the Zones panel) can't be dragged, scaled,
+  // split, or deleted -- everything that would otherwise move or remove
+  // them. Refreshed into this module-level set on every renderRealm() so
+  // the mousedown handlers below always see the current lock state without
+  // each one having to re-read localStorage.
+  let lockedFiles = new Set();
+  function loadLockedPieces(realm) {
+    try {
+      return new Set(JSON.parse(localStorage.getItem("realmBuilderLocked_" + realm) || "[]"));
+    } catch (e) {
+      return new Set();
+    }
+  }
+  function saveLockedPieces(realm, set) {
+    localStorage.setItem("realmBuilderLocked_" + realm, JSON.stringify(Array.from(set)));
+  }
+
   function effectivePieces(realm) {
     const hidden = loadHiddenOriginals(realm);
     const deleted = loadDeletedPieces(realm);
@@ -468,6 +485,7 @@
     const el = overlay.getElement();
     if (!el) return;
     el.classList.add("realm-piece-img");
+    if (lockedFiles.has(file)) el.classList.add("locked");
     el.addEventListener("mousedown", (e) => {
       // Ctrl+click ignores this piece entirely and lets the mousedown fall
       // through to the map -- Leaflet's own dragging (never disabled except
@@ -479,6 +497,13 @@
       e.stopPropagation(); // don't let this also reach the map's box-select/clear-selection handler
       if (lineDrawMode) {
         startLineDrawAt(e);
+        return;
+      }
+      // Shift+click selection still works on a locked piece (useful for
+      // just looking it over), but nothing that would move, resize, split,
+      // or drag it does.
+      if (lockedFiles.has(file) && !e.shiftKey) {
+        updateStatus(`${baseNameFor(file)} is locked -- uncheck Lock in the Zones panel to move, scale, or split it.`);
         return;
       }
       if (splitMode) {
@@ -496,7 +521,9 @@
       if (!selectedFiles.has(file)) clearSelection();
 
       // Dragging a piece that's part of a multi-selection moves the whole
-      // group together, each from its own starting bounds.
+      // group together, each from its own starting bounds -- locked members
+      // of the selection are left out so they stay put even when dragged
+      // along with an unlocked one.
       const groupFiles = selectedFiles.size > 1 ? Array.from(selectedFiles) : null;
       activeDrag = {
         overlay,
@@ -504,7 +531,7 @@
         startLatLng: map.mouseEventToLatLng(e),
         startBounds: overlay.getBounds(),
         groupStartBounds: groupFiles
-          ? Object.fromEntries(groupFiles.filter(f => overlaysByFile[f]).map(f => [f, overlaysByFile[f].overlay.getBounds()]))
+          ? Object.fromEntries(groupFiles.filter(f => overlaysByFile[f] && !lockedFiles.has(f)).map(f => [f, overlaysByFile[f].overlay.getBounds()]))
           : null
       };
       map.dragging.disable();
@@ -1236,6 +1263,7 @@
     currentRealm = realm;
     lineUndoStack = [];
     lastUsedLineId = null;
+    lockedFiles = loadLockedPieces(realm);
     pieceLayerGroup.clearLayers();
     overlaysByFile = {};
     selectedFiles.clear();
@@ -1312,12 +1340,16 @@
 
   function renderZonePanel(realm) {
     const zones = collectZones(realm);
+    const locked = loadLockedPieces(realm);
     const listEl = document.getElementById("zone-list");
     listEl.innerHTML = zones.map(z => {
       const checks = z.pieces.map(f =>
         `<label class="zone-check" title="${escapeHtml(baseNameFor(f))}"><input type="checkbox" data-root="${escapeHtml(z.root)}" data-file="${escapeHtml(f)}"></label>`
       ).join("");
-      return `<div class="zone-row" data-root="${escapeHtml(z.root)}"><span class="zone-row-label" title="${escapeHtml(z.label)}">${escapeHtml(z.label)}</span><span class="zone-row-checks">${checks}</span></div>`;
+      const allLocked = z.pieces.every(f => locked.has(f));
+      const lockTitle = `Lock ${escapeHtml(z.label)} in place -- prevents moving, scaling, splitting, or deleting`;
+      const lockCheck = `<label class="zone-lock" title="${lockTitle}"><input type="checkbox" class="zone-lock-checkbox" data-root="${escapeHtml(z.root)}"${allLocked ? " checked" : ""}></label>`;
+      return `<div class="zone-row" data-root="${escapeHtml(z.root)}"><span class="zone-row-label" title="${escapeHtml(z.label)}">${escapeHtml(z.label)}</span><span class="zone-row-checks">${checks}</span>${lockCheck}</div>`;
     }).join("");
   }
 
@@ -1655,13 +1687,19 @@
         updateStatus("Select a piece (or pieces) first, then click Delete.");
         return;
       }
+      const toDelete = Array.from(selectedFiles).filter(f => !lockedFiles.has(f));
+      const lockedCount = selectedFiles.size - toDelete.length;
+      if (toDelete.length === 0) {
+        updateStatus("Selected piece(s) are locked -- uncheck Lock in the Zones panel first.");
+        return;
+      }
       const deleted = loadDeletedPieces(currentRealm);
-      const count = selectedFiles.size;
-      selectedFiles.forEach(f => deleted.add(f));
+      toDelete.forEach(f => deleted.add(f));
       saveDeletedPieces(currentRealm, deleted);
       clearSelection();
       renderRealm(currentRealm);
-      updateStatus(`Removed ${count} piece(s) from view -- not permanent, restore them from the "Restore" dropdown.`);
+      const lockedNote = lockedCount ? ` (${lockedCount} locked piece(s) skipped)` : "";
+      updateStatus(`Removed ${toDelete.length} piece(s) from view -- not permanent, restore them from the "Restore" dropdown.${lockedNote}`);
     });
 
     document.getElementById("restore-confirm-btn").addEventListener("click", () => {
@@ -1702,12 +1740,31 @@
       const checkbox = e.target;
       if (checkbox.tagName !== "INPUT") return;
       const root = checkbox.dataset.root;
+
+      if (checkbox.classList.contains("zone-lock-checkbox")) {
+        const row = checkbox.closest(".zone-row");
+        const files = Array.from(row.querySelectorAll("input[data-file]")).map(cb => cb.dataset.file);
+        const locked = loadLockedPieces(currentRealm);
+        files.forEach(f => { if (checkbox.checked) locked.add(f); else locked.delete(f); });
+        saveLockedPieces(currentRealm, locked);
+        lockedFiles = locked;
+        files.forEach(f => {
+          const entry = overlaysByFile[f];
+          const el = entry && entry.overlay.getElement();
+          if (el) el.classList.toggle("locked", checkbox.checked);
+        });
+        updateStatus(checkbox.checked
+          ? `Locked ${baseNameFor(root)} in place.`
+          : `Unlocked ${baseNameFor(root)}.`);
+        return;
+      }
+
       const file = checkbox.dataset.file;
       if (checkbox.checked) {
         // Only one piece of a given zone can be "checked" at a time -- these
         // act as a per-row radio group, picking which part of a split zone
         // to jump to.
-        document.querySelectorAll(`#zone-list input[data-root="${cssEscape(root)}"]`).forEach(cb => {
+        document.querySelectorAll(`#zone-list input[data-root="${cssEscape(root)}"][data-file]`).forEach(cb => {
           if (cb !== checkbox) cb.checked = false;
         });
         clearSelection();

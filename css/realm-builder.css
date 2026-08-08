@@ -343,6 +343,15 @@ html, body {
   cursor: pointer;
 }
 
+.zone-lock {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid #444a58;
+  cursor: pointer;
+}
+
 .zone-row-flash {
   background: rgba(255, 215, 108, 0.25);
 }
@@ -369,6 +378,11 @@ html, body {
 .realm-piece-img.scaling {
   cursor: nwse-resize;
   box-shadow: 0 0 0 3px #b48cff, 0 6px 20px rgba(0,0,0,0.6);
+}
+
+.realm-piece-img.locked {
+  cursor: not-allowed;
+  box-shadow: 0 0 0 3px #8a93a6, 0 4px 14px rgba(0,0,0,0.5);
 }
 
 /* Shift-drag box-select rectangle, positioned in map-container pixel
