@@ -14,8 +14,8 @@
 const DEV_ACCOUNTS = [
   {
     username: "Gnawbie",
-    salt: "252d36b54edb5f450e19a8a91e602b9a",
-    hash: "9fa6f42af76dc23880ae7a07d10c4cff6849fca783fc89b2cc7eaa11c1d71627",
+    salt: "4a3996bd34fd8f6b0470593dd5533b12",
+    hash: "cd9e6e3322ff6f8023f76f31e0c7537ba4ca3cbc3b2874fcaf6c598022a174d3",
     iterations: 200000,
     role: "main"
   }
