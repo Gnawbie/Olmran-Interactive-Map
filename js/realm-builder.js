@@ -1200,6 +1200,27 @@
   // each kept group becomes its own draggable piece (in-memory data URL, no
   // real file needed) positioned exactly where its content already was, so
   // nothing jumps and you can start dragging groups apart immediately.
+  // Walks a virtual piece's sourceFile chain back to the real REALM_PIECES
+  // entry it ultimately came from, however many times it was re-split along
+  // the way. Falls back to stripping this tool's own " (Part N)" naming
+  // convention when the chain runs out early (an in-between part was itself
+  // re-split and deleted, so its own sourceFile is gone) -- that recovers
+  // the true root for data written before this function existed, which only
+  // ever recorded the immediate parent, not the ultimate one.
+  function ultimateRootFor(realm, file) {
+    const virtual = loadVirtualPieces(realm);
+    const realFiles = new Set((REALM_PIECES[realm] || []).map(p => p.file));
+    let current = file;
+    const seen = new Set();
+    while (!realFiles.has(current) && virtual[current] && virtual[current].sourceFile && !seen.has(current)) {
+      seen.add(current);
+      current = virtual[current].sourceFile;
+    }
+    if (realFiles.has(current)) return current;
+    const guessFile = current.replace(/\.png$/i, "").replace(/(\s\(Part \d+\))+$/i, "") + ".png";
+    return realFiles.has(guessFile) ? guessFile : current;
+  }
+
   function placeSplitPartsLive() {
     const s = splitState;
     if (!s || !s.groups) return;
@@ -1221,6 +1242,10 @@
     const layout = loadLayoutFromStorage(s.realm) || {};
     let placedCount = 0;
 
+    // Resolved BEFORE s.file is deleted from virtual below, while its own
+    // chain (if it's itself a re-split part) is still walkable.
+    const rootFile = ultimateRootFor(s.realm, s.file);
+
     s.groups.filter(g => g.included).forEach(g => {
       let filename = (g.filename || "").trim();
       if (!filename) return;
@@ -1229,9 +1254,11 @@
       const canvas = finalCanvasFor(g, titleCanvas, titleGroup && titleGroup.id);
       virtual[filename] = {
         width: canvas.width, height: canvas.height, dataUrl: canvas.toDataURL("image/png"),
-        // Tracks what this piece was cut from, so Restore Original can find
-        // and remove every part that came out of a given split.
-        sourceFile: s.file
+        // The ULTIMATE real piece this came from, not just the immediate
+        // parent -- so re-splitting a part still traces back correctly, no
+        // matter how many times it happens, without depending on every
+        // intermediate part's own record still existing later.
+        sourceFile: rootFile
       };
       layout[filename] = { x: origWorldX + g.x0, y: origWorldY + g.y0 };
       placedCount++;
@@ -1266,29 +1293,29 @@
   }
 
   // Undoes placeSplitPartsLive for one original: un-hides it and removes
-  // every virtual piece whose sourceFile traces back to it (and any of
-  // THEIR virtual descendants, in case one of the parts was split again),
-  // so nothing from that split lingers behind after restoring.
+  // every virtual piece that ultimately traces back to it, no matter how
+  // many times one of its parts was re-split along the way -- ultimateRootFor
+  // resolves the real root directly rather than walking one hop at a time,
+  // so this doesn't depend on every in-between part's own record surviving.
   function restoreOriginalPiece(realm, originalFile) {
     const virtual = loadVirtualPieces(realm);
     const hidden = loadHiddenOriginals(realm);
     const layout = loadLayoutFromStorage(realm) || {};
 
-    const toRemove = new Set([originalFile]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      Object.entries(virtual).forEach(([vfile, v]) => {
-        if (toRemove.has(v.sourceFile) && !toRemove.has(vfile)) {
-          toRemove.add(vfile);
-          changed = true;
-        }
-      });
-    }
-    toRemove.forEach(f => {
-      if (f === originalFile) return; // the original itself gets restored, not deleted
-      delete virtual[f];
-      delete layout[f];
+    Object.keys(virtual).forEach(vfile => {
+      if (ultimateRootFor(realm, vfile) === originalFile) {
+        delete virtual[vfile];
+        delete layout[vfile];
+      }
+    });
+    // Also clear out any now-orphaned intermediate part names left behind in
+    // "hidden" from a since-deleted re-split (the part itself is gone, but
+    // its filename stayed marked hidden) -- otherwise those linger forever
+    // with nothing on the map to show for them.
+    Array.from(hidden).forEach(hfile => {
+      if (hfile !== originalFile && ultimateRootFor(realm, hfile) === originalFile) {
+        hidden.delete(hfile);
+      }
     });
 
     hidden.delete(originalFile);
@@ -1363,15 +1390,13 @@
   // ---- Zone panel (floating list of every zone currently on the map) ----
   // A "zone" is one entry from REALM_PIECES -- its own original file name.
   // Splitting it doesn't create new zones, it just changes how many live
-  // pieces that zone currently has (tracked here by tracing each live
-  // virtual piece's immediate sourceFile back to the real original; nested
-  // re-splits of a split-off part aren't tracked past that one hop, since
-  // that's also the limit of what the split data model itself retains).
+  // pieces that zone currently has (tracked here via ultimateRootFor, which
+  // resolves all the way back to the real original regardless of how many
+  // times a part was re-split).
   function collectZones(realm) {
-    const virtual = loadVirtualPieces(realm);
     const byRoot = {};
     effectivePieces(realm).forEach(p => {
-      const root = p.isVirtual ? ((virtual[p.file] && virtual[p.file].sourceFile) || p.file) : p.file;
+      const root = p.isVirtual ? ultimateRootFor(realm, p.file) : p.file;
       (byRoot[root] || (byRoot[root] = [])).push(p.file);
     });
     return (REALM_PIECES[realm] || [])
