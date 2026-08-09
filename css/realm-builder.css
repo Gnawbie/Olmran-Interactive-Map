@@ -585,6 +585,23 @@ html, body {
 }
 #split-controls button:hover { background: #2a2f3a; }
 
+#split-brush-mode-controls {
+  display: flex;
+  gap: 6px;
+}
+
+#split-erase-btn.active {
+  background: #ff5c5c;
+  border-color: #ff5c5c;
+  color: #16181f;
+}
+
+#split-add-btn.active {
+  background: #4ade56;
+  border-color: #4ade56;
+  color: #16181f;
+}
+
 #split-controls input[type="number"] {
   padding: 5px 7px;
   border-radius: 5px;

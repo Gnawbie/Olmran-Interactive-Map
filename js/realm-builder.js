@@ -614,6 +614,8 @@
       document.getElementById("split-results").classList.add("hidden");
       document.getElementById("split-groups-grid").innerHTML = "";
       document.getElementById("split-min-size").value = Math.max(150, Math.round(natW * natH * 0.0015));
+      document.getElementById("split-erase-btn").classList.add("active");
+      document.getElementById("split-add-btn").classList.remove("active");
       document.getElementById("split-modal").classList.remove("hidden");
 
       const wrap = document.getElementById("split-canvas-wrap");
@@ -649,6 +651,10 @@
         // drawing a cut can never destroy actual map content.
         cutMask: new Uint8Array(natW * natH),
         brushSize: parseInt(document.getElementById("split-brush-size").value, 10),
+        // "erase" paints a cut (the default); "add" is the inverse -- it
+        // paints those cut marks back away, unhiding whatever part of the
+        // piece they were hiding.
+        brushMode: "erase",
         groups: null, nextGroupId: 1, dragSourceGroupId: null
       };
 
@@ -733,6 +739,42 @@
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       eraseAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, radius);
+    }
+  }
+
+  // The Add brush -- exact inverse of eraseAt. Punches a transparent hole
+  // in the cut-mask overlay (via destination-out) and clears the matching
+  // cutMask bits, so whatever real content was hidden under a cut shows
+  // through again. Still never touches fullCanvas, same as eraseAt.
+  function addAt(x, y, radius) {
+    const s = splitState;
+    const ctx = s.cutMaskCtx;
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    const w = s.natW, h = s.natH, mask = s.cutMask;
+    const cx = Math.round(x), cy = Math.round(y), r = Math.ceil(radius), r2 = radius * radius;
+    const y0 = Math.max(0, cy - r), y1 = Math.min(h - 1, cy + r);
+    const x0 = Math.max(0, cx - r), x1 = Math.min(w - 1, cx + r);
+    for (let py = y0; py <= y1; py++) {
+      const dy = py - cy;
+      for (let px = x0; px <= x1; px++) {
+        const dx = px - cx;
+        if (dx * dx + dy * dy <= r2) mask[py * w + px] = 0;
+      }
+    }
+  }
+
+  function addStroke(x0, y0, x1, y1, radius) {
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.ceil(dist / Math.max(2, radius / 2)));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      addAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, radius);
     }
   }
 
@@ -1808,7 +1850,8 @@
         });
         splitState.drawing = true;
         last = splitCanvasPoint(e);
-        eraseAt(last[0], last[1], splitState.brushSize);
+        if (splitState.brushMode === "add") addAt(last[0], last[1], splitState.brushSize);
+        else eraseAt(last[0], last[1], splitState.brushSize);
         redrawSplitDisplay();
       });
       // On window, not canvas -- dragging toward an edge very easily carries
@@ -1824,7 +1867,8 @@
         }
         if (!splitState || !splitState.drawing) return;
         const p = splitCanvasPoint(e);
-        eraseStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
+        if (splitState.brushMode === "add") addStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
+        else eraseStroke(last[0], last[1], p[0], p[1], splitState.brushSize);
         last = p;
         redrawSplitDisplay();
       });
@@ -1833,6 +1877,20 @@
         if (splitState) splitState.drawing = false;
       });
     })();
+
+    document.getElementById("split-erase-btn").addEventListener("click", () => {
+      if (!splitState) return;
+      splitState.brushMode = "erase";
+      document.getElementById("split-erase-btn").classList.add("active");
+      document.getElementById("split-add-btn").classList.remove("active");
+    });
+
+    document.getElementById("split-add-btn").addEventListener("click", () => {
+      if (!splitState) return;
+      splitState.brushMode = "add";
+      document.getElementById("split-add-btn").classList.add("active");
+      document.getElementById("split-erase-btn").classList.remove("active");
+    });
 
     document.getElementById("split-brush-size").addEventListener("input", (e) => {
       if (splitState) splitState.brushSize = parseInt(e.target.value, 10);

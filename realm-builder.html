@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Realm Builder — Land of Olmran</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<link rel="stylesheet" href="css/realm-builder.css?v=24">
+<link rel="stylesheet" href="css/realm-builder.css?v=25">
 </head>
 <body>
 
@@ -83,6 +83,10 @@
         <canvas id="split-canvas"></canvas>
       </div>
       <div id="split-controls">
+        <span id="split-brush-mode-controls">
+          <button id="split-erase-btn" class="active" title="Paint a cut -- separates the piece along wherever you drag">Erase</button>
+          <button id="split-add-btn" title="Paint over a cut to undo it right there, unhiding that part of the piece again">Add</button>
+        </span>
         <label>Brush size <input type="range" id="split-brush-size" min="4" max="80" value="4"></label>
         <span id="split-zoom-controls">
           <button id="split-zoom-out-btn" title="Zoom out">&minus;</button>
@@ -120,9 +124,9 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="js/data/dev-accounts.js?v=29"></script>
-<script src="js/data/realm-pieces.js?v=29"></script>
-<script src="js/data/realm-seed-layout.js?v=29"></script>
-<script src="js/realm-builder.js?v=29"></script>
+<script src="js/data/dev-accounts.js?v=30"></script>
+<script src="js/data/realm-pieces.js?v=30"></script>
+<script src="js/data/realm-seed-layout.js?v=30"></script>
+<script src="js/realm-builder.js?v=30"></script>
 </body>
 </html>
