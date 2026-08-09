@@ -231,7 +231,8 @@
     const dx = line.x2 - line.x1, dy = line.y2 - line.y1;
     if (dy === 0) return "horizontal";
     if (dx === 0) return "vertical";
-    return "45°";
+    const deg = Math.round(Math.abs(Math.atan2(dy, dx) * 180 / Math.PI));
+    return `${deg}°`;
   }
 
   function renderConnectorLines(realm) {
@@ -262,17 +263,6 @@
     document.getElementById("line-undo-btn").disabled = lineUndoStack.length === 0;
   }
 
-  // Rounds the drawn direction to the nearest 0/45/90/135 degrees (image
-  // pixel space, so this is exact for horizontal/vertical regardless of
-  // aspect ratio) while keeping the actual dragged distance.
-  function snapLineEnd(x0, y0, x1, y1) {
-    const dx = x1 - x0, dy = y1 - y0;
-    const dist = Math.hypot(dx, dy);
-    if (dist === 0) return [x0, y0];
-    const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
-    return [x0 + dist * Math.cos(angle), y0 + dist * Math.sin(angle)];
-  }
-
   function startLineDrawAt(e) {
     e.preventDefault();
     const ll = map.mouseEventToLatLng(e);
@@ -282,11 +272,10 @@
 
   function updateLineDrawTo(latlng) {
     const d = activeLineDraw;
-    const [sx, sy] = snapLineEnd(d.x0, d.y0, latlng.lng, -latlng.lat);
-    d.endX = sx; d.endY = sy;
+    d.endX = latlng.lng; d.endY = -latlng.lat;
     if (d.previewLine) map.removeLayer(d.previewLine);
     d.previewLine = L.polyline(
-      [xyToLatLng(d.x0, d.y0), xyToLatLng(sx, sy)],
+      [xyToLatLng(d.x0, d.y0), xyToLatLng(d.endX, d.endY)],
       { color: "#ffd76c", weight: 3, dashArray: "6,6", pane: "connectorLines", interactive: false }
     ).addTo(map);
   }
@@ -1716,7 +1705,7 @@
       e.target.classList.toggle("active", lineDrawMode);
       if (lineDrawMode) deactivateOtherModes("line");
       updateStatus(lineDrawMode
-        ? "Draw Line: drag from one piece toward another -- snaps to horizontal, vertical, or 45°."
+        ? "Draw Line: drag from one piece toward another -- any angle."
         : `${loadConnectorLines(currentRealm).length} line(s) saved for ${currentRealm}.`);
     });
 
