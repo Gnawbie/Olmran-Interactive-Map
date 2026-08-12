@@ -42,6 +42,12 @@
     minZoom: -5,
     maxZoom: 3,
     zoomSnap: 0.25,
+    // zoomSnap alone only controls which levels the map is allowed to rest
+    // at -- zoomDelta controls how far each +/- click or scroll notch
+    // actually moves. Left at its default (1), every step still jumped a
+    // full zoom level; matching it to zoomSnap gives four times as many
+    // steps across the same range.
+    zoomDelta: 0.25,
     attributionControl: false,
     // Default (0.0) lets you drag past maxBounds but elastically snaps back
     // to it on release -- 1.0 makes maxBounds a hard stop instead, so the
