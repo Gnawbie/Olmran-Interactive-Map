@@ -42,7 +42,11 @@
     minZoom: -5,
     maxZoom: 3,
     zoomSnap: 0.25,
-    attributionControl: false
+    attributionControl: false,
+    // Default (0.0) lets you drag past maxBounds but elastically snaps back
+    // to it on release -- 1.0 makes maxBounds a hard stop instead, so the
+    // map simply stays wherever it's dragged to instead of bouncing back.
+    maxBoundsViscosity: 1.0
   });
 
   // Leaflet's CRS.Simple projects increasing latitude as "up" on screen (like
